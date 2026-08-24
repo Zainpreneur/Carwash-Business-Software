@@ -16,11 +16,21 @@ export const authApi = {
 }
 
 export const customersApi = makeResource('/customers')
-export const vehiclesApi = makeResource('/vehicles')
+export const vehiclesApi = {
+  ...makeResource('/vehicles'),
+  lookupPlate: (plate) => apiClient.get(`/vehicles/plate/${encodeURIComponent(plate)}`).then((r) => r.data),
+}
 export const servicesApi = makeResource('/services')
 export const usersApi = makeResource('/users')
 export const expensesApi = {
   ...makeResource('/expenses'),
+}
+
+export const notificationsApi = {
+  list: () => apiClient.get('/notifications').then((r) => r.data),
+  unreadCount: () => apiClient.get('/notifications/unread-count').then((r) => r.data),
+  markRead: (id) => apiClient.patch(`/notifications/${id}/read`).then((r) => r.data),
+  markAllRead: () => apiClient.patch('/notifications/read-all').then((r) => r.data),
 }
 
 export const bookingsApi = {
@@ -36,4 +46,5 @@ export const dashboardApi = {
     apiClient.get('/dashboard/service-breakdown', { params: { days } }).then((r) => r.data),
   statusBreakdown: () => apiClient.get('/dashboard/status-breakdown').then((r) => r.data),
   upcomingBookings: () => apiClient.get('/dashboard/upcoming-bookings').then((r) => r.data),
+  insights: () => apiClient.get('/dashboard/insights').then((r) => r.data),
 }

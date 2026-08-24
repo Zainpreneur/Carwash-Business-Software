@@ -1,14 +1,17 @@
-const mongoose = require('mongoose');
+require('dotenv').config();
+const { Pool } = require('pg');
+const { drizzle } = require('drizzle-orm/node-postgres');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgres://localhost:5432/carwash',
+});
+
+const db = drizzle(pool);
 
 const connectDB = async () => {
-  const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/carwash';
-  try {
-    await mongoose.connect(uri);
-    console.log(`MongoDB connected: ${mongoose.connection.host}`);
-  } catch (err) {
-    console.error(`MongoDB connection error: ${err.message}`);
-    process.exit(1);
-  }
+  const client = await pool.connect();
+  await client.query('SELECT 1');
+  client.release();
 };
 
-module.exports = connectDB;
+module.exports = { pool, db, connectDB };

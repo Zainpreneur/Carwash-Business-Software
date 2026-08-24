@@ -1,23 +1,37 @@
 const asyncHandler = require('express-async-handler');
-const User = require('../models/User');
+const bcrypt = require('bcryptjs');
+const { eq, sql } = require('drizzle-orm');
+const { db } = require('../config/db');
+const { users } = require('../db/schema');
 const generateToken = require('../utils/generateToken');
+
+const hashPassword = (plain) => bcrypt.hash(plain, 10);
 
 // @desc    Register a new user (admin/manager only in practice, first user open)
 // @route   POST /api/auth/register
 const register = asyncHandler(async (req, res) => {
   const { name, email, password, role, phone } = req.body;
 
-  const userExists = await User.findOne({ email });
-  if (userExists) {
+  const existing = await db.select({ _id: users._id }).from(users).where(eq(users.email, email.toLowerCase()));
+  if (existing.length) {
     res.status(400);
     throw new Error('A user with this email already exists');
   }
 
-  const userCount = await User.countDocuments();
   // First registered user becomes admin automatically; afterwards default to staff
-  const assignedRole = userCount === 0 ? 'admin' : role || 'staff';
+  const [{ count }] = await db.select({ count: sql`count(*)`.mapWith(Number) }).from(users);
+  const assignedRole = count === 0 ? 'admin' : role || 'staff';
 
-  const user = await User.create({ name, email, password, role: assignedRole, phone });
+  const [user] = await db
+    .insert(users)
+    .values({
+      name,
+      email: email.toLowerCase(),
+      password: await hashPassword(password),
+      role: assignedRole,
+      phone,
+    })
+    .returning();
 
   res.status(201).json({
     _id: user._id,
@@ -33,8 +47,8 @@ const register = asyncHandler(async (req, res) => {
 const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  const user = await User.findOne({ email }).select('+password');
-  if (!user || !(await user.matchPassword(password))) {
+  const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+  if (!user || !(await bcrypt.compare(password, user.password))) {
     res.status(401);
     throw new Error('Invalid email or password');
   }

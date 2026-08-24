@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
-const User = require('../models/User');
+const { eq } = require('drizzle-orm');
+const { db } = require('../config/db');
+const { users } = require('../db/schema');
 
 const protect = asyncHandler(async (req, res, next) => {
   let token;
@@ -17,7 +19,8 @@ const protect = asyncHandler(async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id);
+    const [user] = await db.select().from(users).where(eq(users._id, decoded.id));
+    req.user = user;
     if (!req.user || !req.user.active) {
       res.status(401);
       throw new Error('Not authorized, user not found or inactive');

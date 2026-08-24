@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { Menu, LogOut, ChevronDown, User as UserIcon } from 'lucide-react'
+import { Menu, LogOut, ChevronDown, User as UserIcon, ScanLine } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import NotificationsBell from './NotificationsBell'
+import PlateScanner from '../shared/PlateScanner'
 
 const Topbar = ({ onMenuClick, title }) => {
   const { user, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [scanOpen, setScanOpen] = useState(false)
   const navigate = useNavigate()
 
   const initials = (user?.name || '?')
@@ -21,6 +24,17 @@ const Topbar = ({ onMenuClick, title }) => {
         <Menu size={20} />
       </button>
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900 sm:text-lg">{title}</h1>
+
+      <button
+        onClick={() => setScanOpen(true)}
+        className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700"
+        title="Scan a number plate"
+      >
+        <ScanLine size={15} />
+        <span className="hidden sm:inline">Scan plate</span>
+      </button>
+
+      <NotificationsBell />
 
       <div className="relative">
         <button
@@ -63,6 +77,8 @@ const Topbar = ({ onMenuClick, title }) => {
           </>
         )}
       </div>
+
+      <PlateScanner open={scanOpen} onClose={() => setScanOpen(false)} />
     </header>
   )
 }

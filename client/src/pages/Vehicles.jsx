@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Search, Pencil, Trash2, Car } from 'lucide-react'
+import { Plus, Search, Pencil, Trash2, Car, ScanLine } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { vehiclesApi } from '../api/resources'
 import { getErrorMessage } from '../api/client'
@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Spinner from '../components/ui/Spinner'
 import EmptyState from '../components/ui/EmptyState'
 import CustomerPicker from '../components/shared/CustomerPicker'
+import PlateScanner from '../components/shared/PlateScanner'
 
 const emptyForm = { customer: null, make: '', model: '', year: '', color: '', plateNumber: '', type: 'sedan' }
 
@@ -25,6 +26,7 @@ const Vehicles = () => {
 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [scanOpen, setScanOpen] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -106,9 +108,14 @@ const Vehicles = () => {
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input className="input pl-9" placeholder="Search plate number…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        <button className="btn-primary shrink-0" onClick={openCreate}>
-          <Plus size={16} /> Add vehicle
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button className="btn-secondary" onClick={() => setScanOpen(true)}>
+            <ScanLine size={16} /> Scan plate
+          </button>
+          <button className="btn-primary" onClick={openCreate}>
+            <Plus size={16} /> Add vehicle
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -207,6 +214,8 @@ const Vehicles = () => {
           </div>
         </form>
       </Modal>
+
+      <PlateScanner open={scanOpen} onClose={() => setScanOpen(false)} />
 
       <ConfirmDialog
         open={!!deleteTarget}

@@ -24,7 +24,7 @@ const emptyState = {
   notes: '',
 }
 
-const BookingFormModal = ({ open, onClose, onSaved, editing }) => {
+const BookingFormModal = ({ open, onClose, onSaved, editing, prefill }) => {
   const [form, setForm] = useState(emptyState)
   const [services, setServices] = useState([])
   const [staff, setStaff] = useState([])
@@ -51,9 +51,13 @@ const BookingFormModal = ({ open, onClose, onSaved, editing }) => {
         notes: editing.notes || '',
       })
     } else {
-      setForm(emptyState)
+      setForm({
+        ...emptyState,
+        customer: prefill?.customer || null,
+        vehicleId: prefill?.vehicleId || '',
+      })
     }
-  }, [editing, open])
+  }, [editing, open, prefill])
 
   const toggleService = (id) => {
     setForm((f) => ({

@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend,
 } from 'recharts'
-import { CalendarClock, DollarSign, Hourglass, Users, Wrench } from 'lucide-react'
+import { CalendarClock, DollarSign, Hourglass, Users, Wrench, Sparkles, Lightbulb } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { dashboardApi } from '../api/resources'
 import StatCard from '../components/ui/StatCard'
@@ -20,6 +20,7 @@ const Dashboard = () => {
   const [chart, setChart] = useState([])
   const [breakdown, setBreakdown] = useState([])
   const [upcoming, setUpcoming] = useState([])
+  const [insights, setInsights] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -29,13 +30,15 @@ const Dashboard = () => {
       dashboardApi.revenueChart(14),
       dashboardApi.serviceBreakdown(30),
       dashboardApi.upcomingBookings(),
+      dashboardApi.insights().catch(() => null),
     ])
-      .then(([s, c, b, u]) => {
+      .then(([s, c, b, u, ins]) => {
         if (!mounted) return
         setSummary(s)
         setChart(c)
         setBreakdown(b)
         setUpcoming(u)
+        setInsights(ins)
       })
       .finally(() => mounted && setLoading(false))
     return () => {
@@ -107,6 +110,35 @@ const Dashboard = () => {
           )}
         </div>
       </div>
+
+      {insights && (
+        <div className="card p-4 sm:p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Sparkles size={16} className="text-brand-500" />
+            <h3 className="text-sm font-semibold text-slate-800">Business Advisor</h3>
+            <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-600">
+              {insights.summary.completedThisMonth} completed this month · avg ${insights.summary.avgBookingValue}
+            </span>
+          </div>
+          {insights.recommendations.length === 0 ? (
+            <p className="text-sm text-slate-400">Everything looks healthy — no recommendations right now.</p>
+          ) : (
+            <ul className="space-y-2">
+              {insights.recommendations.map((rec, i) => (
+                <li key={i} className="flex items-start gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <Lightbulb size={14} className="mt-0.5 shrink-0 text-amber-500" />
+                  {rec}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-500">
+            <span>Repeat customers: <b className="text-slate-700">{insights.summary.repeatCustomerRate}%</b></span>
+            <span>Cancelled: <b className="text-slate-700">{insights.summary.statusBreakdown.cancelled || 0}</b></span>
+            <span>Pending: <b className="text-slate-700">{insights.summary.statusBreakdown.pending || 0}</b></span>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5 sm:px-5">

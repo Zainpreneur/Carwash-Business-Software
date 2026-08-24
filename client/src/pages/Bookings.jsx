@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, CalendarClock, Pencil, Trash2, Eye } from 'lucide-react'
+import { Plus, CalendarClock, Pencil, Trash2, Eye, LayoutList, CalendarDays } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { bookingsApi } from '../api/resources'
@@ -11,6 +11,7 @@ import Pagination from '../components/ui/Pagination'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import BookingFormModal from '../components/bookings/BookingFormModal'
 import BookingDetailModal from '../components/bookings/BookingDetailModal'
+import BookingsCalendar from '../components/bookings/BookingsCalendar'
 import { useAuth } from '../context/AuthContext'
 
 const statusOptions = ['pending', 'confirmed', 'in-progress', 'completed', 'cancelled']
@@ -29,15 +30,16 @@ const Bookings = () => {
   const [viewingId, setViewingId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [view, setView] = useState('table')
 
   const load = useCallback(() => {
     setLoading(true)
     bookingsApi
-      .list({ status: status || undefined, date: date || undefined, page, limit: 10 })
+      .list({ status: status || undefined, date: date || undefined, page, limit: view === 'calendar' ? 100 : 10 })
       .then(setData)
       .catch((err) => toast.error(getErrorMessage(err)))
       .finally(() => setLoading(false))
-  }, [status, date, page])
+  }, [status, date, page, view])
 
   useEffect(load, [load])
 
@@ -109,13 +111,31 @@ const Bookings = () => {
             </button>
           )}
         </div>
-        <button className="btn-primary shrink-0" onClick={openCreate}>
-          <Plus size={16} /> New booking
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex overflow-hidden rounded-lg border border-slate-200">
+            <button
+              onClick={() => setView('table')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium ${view === 'table' ? 'bg-brand-500 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+            >
+              <LayoutList size={14} /> Table
+            </button>
+            <button
+              onClick={() => setView('calendar')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium ${view === 'calendar' ? 'bg-brand-500 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+            >
+              <CalendarDays size={14} /> Calendar
+            </button>
+          </div>
+          <button className="btn-primary shrink-0" onClick={openCreate}>
+            <Plus size={16} /> New booking
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <Spinner full />
+      ) : view === 'calendar' ? (
+        <BookingsCalendar bookings={data.data} />
       ) : data.data.length === 0 ? (
         <div className="card">
           <EmptyState icon={CalendarClock} title="No bookings found" message="Adjust your filters or create a new booking." />
