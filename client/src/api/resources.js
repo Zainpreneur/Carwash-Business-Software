@@ -60,6 +60,15 @@ export const conciergeApi = {
   simulate: (fromPhone, text) => apiClient.post('/concierge/simulate', { fromPhone, text }).then((r) => r.data),
 }
 
+export const ticketsApi = {
+  list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
+  get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),
+  create: (data) => apiClient.post('/tickets', data).then((r) => r.data),
+  updateStatus: (id, status) => apiClient.patch(`/tickets/${id}/status`, { status }).then((r) => r.data),
+  assign: (id, assignedTo) => apiClient.patch(`/tickets/${id}/assign`, { assignedTo }).then((r) => r.data),
+  addComment: (id, body) => apiClient.post(`/tickets/${id}/comments`, { body }).then((r) => r.data),
+}
+
 export const washOrdersApi = {
   ...makeResource('/wash-orders'),
   assignBay: (id, bayId) => apiClient.patch(`/wash-orders/${id}/assign-bay`, bayId ? { bayId } : {}).then((r) => r.data),

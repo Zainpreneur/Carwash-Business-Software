@@ -303,6 +303,56 @@ const agentConversations = pgTable('agent_conversations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// --- Support/CRM (carwash-compile/04-growth/crm.md, data-model.md's Ticket entity). No
+// formal sales pipeline is built (the spec itself says to skip it for a walk-in-service
+// business) — just the support half, which "applies fully".
+//
+// State machine (terminal: closed): open -> in-progress (assigned-to-staff) -> resolved
+// (issue-resolved) -> closed (closed-after-grace-period); in-progress <-> waiting-on-customer
+// (awaiting-customer-response / customer-responded); waiting-on-customer -> closed
+// (no-response-14-days). SLA deadlines (server/src/utils/tickets.js) are calendar-time, not
+// the spec's "during operating hours" business-hours-aware version — a documented
+// simplification; there's no scheduler yet (see automations.js) to proactively alert before
+// a breach, so risk is computed on every read instead of pushed ahead of time.
+const tickets = pgTable('tickets', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  customer: uuid('customer_id')
+    .notNull()
+    .references(() => customers._id, { onDelete: 'cascade' }),
+  washOrder: uuid('wash_order_id').references(() => washOrders._id, { onDelete: 'set null' }),
+  subject: text('subject').notNull(),
+  // category: damage-claim | billing-dispute | quality-complaint | membership-question | general
+  category: text('category').notNull().default('general'),
+  priority: text('priority').notNull().default('normal'), // low | normal | high | urgent
+  status: text('status').notNull().default('open'),
+  description: text('description'),
+  assignedTo: uuid('assigned_to_id').references(() => users._id, { onDelete: 'set null' }),
+  // source: whatsapp | phone | google-business-profile | in-app — supportChannels in crm.md
+  source: text('source').notNull().default('in-app'),
+  firstRespondedAt: timestamp('first_responded_at', { withTimezone: true }),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Internal staff-facing update thread on a ticket. The actual customer-facing conversation
+// for a WhatsApp-originated ticket lives in agent_conversations / the real WhatsApp thread —
+// this is staff notes and status-change log, not a unified omni-channel thread (documented
+// gap, see README).
+const ticketComments = pgTable('ticket_comments', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  ticket: uuid('ticket_id')
+    .notNull()
+    .references(() => tickets._id, { onDelete: 'cascade' }),
+  author: uuid('author_id').references(() => users._id, { onDelete: 'set null' }),
+  // authorType: staff | system — system for auto-logged state changes (e.g. "escalated by wash-concierge")
+  authorType: text('author_type').notNull().default('staff'),
+  body: text('body').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -320,4 +370,6 @@ module.exports = {
   membershipPlans,
   membershipSubscriptions,
   agentConversations,
+  tickets,
+  ticketComments,
 };

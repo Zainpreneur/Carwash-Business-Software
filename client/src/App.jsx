@@ -10,6 +10,7 @@ import FloorQueue from './pages/FloorQueue'
 import Checkout from './pages/Checkout'
 import MembershipPlans from './pages/MembershipPlans'
 import Concierge from './pages/Concierge'
+import Tickets from './pages/Tickets'
 import Bookings from './pages/Bookings'
 import Customers from './pages/Customers'
 import Vehicles from './pages/Vehicles'
@@ -35,6 +36,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/floor" element={<FloorQueue />} />
             <Route path="/checkout" element={<Checkout />} />
+            <Route path="/tickets" element={<Tickets />} />
             <Route path="/bookings" element={<Bookings />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/vehicles" element={<Vehicles />} />

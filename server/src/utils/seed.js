@@ -15,6 +15,8 @@ const {
   washOrders,
   membershipPlans,
   membershipSubscriptions,
+  tickets,
+  ticketComments,
 } = require('../db/schema');
 
 const servicesSeed = [
@@ -36,7 +38,7 @@ const run = async () => {
   console.log('Seeding database...');
 
   await pool.query(
-    'TRUNCATE agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
+    'TRUNCATE ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
   );
 
   const insertedUsers = await db
@@ -257,6 +259,60 @@ const run = async () => {
     washesThisCycle: 2,
     status: 'active',
   });
+
+  // --- Support tickets (04-growth/crm.md demo data) ---
+  const ticketSeed = [
+    {
+      customer: createdCustomers[0]._id,
+      subject: 'Scratch on rear bumper after wash',
+      category: 'damage-claim',
+      priority: 'high',
+      status: 'open',
+      description: 'Customer noticed a scratch at pickup, wants it looked at.',
+      source: 'in-app',
+      createdBy: admin._id,
+    },
+    {
+      customer: createdCustomers[1]._id,
+      subject: 'Charged twice for membership this month',
+      category: 'billing-dispute',
+      priority: 'normal',
+      status: 'in-progress',
+      description: 'Two charges on the same card on the same day.',
+      source: 'whatsapp',
+      assignedTo: staffMembers[0]._id,
+      firstRespondedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+      createdBy: admin._id,
+    },
+    {
+      customer: createdCustomers[2]._id,
+      subject: 'Interior still had crumbs after Signature wash',
+      category: 'quality-complaint',
+      priority: 'normal',
+      status: 'resolved',
+      description: 'Requested a free rework, completed same day.',
+      source: 'whatsapp',
+      assignedTo: staffMembers[1]._id,
+      firstRespondedAt: new Date(now.getTime() - 26 * 60 * 60 * 1000),
+      resolvedAt: new Date(now.getTime() - 20 * 60 * 60 * 1000),
+      createdBy: admin._id,
+    },
+  ];
+  const createdTickets = await db.insert(tickets).values(ticketSeed).returning();
+  await db.insert(ticketComments).values([
+    {
+      ticket: createdTickets[1]._id,
+      author: staffMembers[0]._id,
+      authorType: 'staff',
+      body: 'Looked into it — one charge was a pending auth that already dropped off. Confirming with customer.',
+    },
+    {
+      ticket: createdTickets[2]._id,
+      author: staffMembers[1]._id,
+      authorType: 'system',
+      body: 'Status changed: in-progress → resolved',
+    },
+  ]);
 
   console.log('Seed complete!');
   console.log('---------------------------------');

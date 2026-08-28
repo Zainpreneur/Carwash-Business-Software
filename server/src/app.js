@@ -19,6 +19,7 @@ const membershipPlanRoutes = require('./routes/membershipPlanRoutes');
 const membershipSubscriptionRoutes = require('./routes/membershipSubscriptionRoutes');
 const integrationRoutes = require('./routes/integrationRoutes');
 const conciergeRoutes = require('./routes/conciergeRoutes');
+const ticketRoutes = require('./routes/ticketRoutes');
 const { handleStripeWebhook } = require('./controllers/stripeWebhookController');
 const { verifyWebhook, receiveMessage } = require('./controllers/whatsappWebhookController');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
@@ -68,6 +69,7 @@ app.use('/api/membership-plans', membershipPlanRoutes);
 app.use('/api/membership-subscriptions', membershipSubscriptionRoutes);
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/concierge', conciergeRoutes);
+app.use('/api/tickets', ticketRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

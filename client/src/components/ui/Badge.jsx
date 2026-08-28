@@ -37,6 +37,16 @@ const statusColor = {
   degraded: 'amber',
   down: 'red',
   retired: 'slate',
+  // ticket lifecycle (04-growth/crm.md)
+  open: 'amber',
+  'waiting-on-customer': 'cyan',
+  resolved: 'green',
+  closed: 'slate',
+  // ticket priority
+  low: 'slate',
+  normal: 'blue',
+  high: 'amber',
+  urgent: 'red',
 }
 
 const Badge = ({ children, color, status, className = '' }) => {

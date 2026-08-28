@@ -1,7 +1,8 @@
 const asyncHandler = require('express-async-handler');
-const { eq, desc, or, ilike, count } = require('drizzle-orm');
+const { eq, desc, or, ilike, count, inArray, and } = require('drizzle-orm');
 const { db } = require('../config/db');
-const { customers, vehicles, bookings } = require('../db/schema');
+const { customers, vehicles, bookings, membershipSubscriptions, membershipPlans, tickets } = require('../db/schema');
+const { withSla, OPEN_STATUSES } = require('../utils/tickets');
 
 const getCustomers = asyncHandler(async (req, res) => {
   const { search, page = 1, limit = 20 } = req.query;
@@ -54,7 +55,37 @@ const getCustomer = asyncHandler(async (req, res) => {
     .orderBy(desc(bookings.scheduledAt))
     .limit(10);
 
-  res.json({ ...customer, vehicles: customerVehicles, recentBookings });
+  // Customer 360 (04-growth/crm.md's customer360Includes): membership status and support
+  // history alongside the wash-history data already assembled above.
+  const [membership] = await db
+    .select({
+      _id: membershipSubscriptions._id,
+      status: membershipSubscriptions.status,
+      nextBillingDate: membershipSubscriptions.nextBillingDate,
+      washesThisCycle: membershipSubscriptions.washesThisCycle,
+      plan: { _id: membershipPlans._id, name: membershipPlans.name, tier: membershipPlans.tier },
+    })
+    .from(membershipSubscriptions)
+    .innerJoin(membershipPlans, eq(membershipSubscriptions.plan, membershipPlans._id))
+    .where(and(eq(membershipSubscriptions.customer, customer._id), inArray(membershipSubscriptions.status, ['active', 'past-due', 'suspended', 'paused'])))
+    .orderBy(desc(membershipSubscriptions.createdAt))
+    .limit(1);
+
+  const customerTickets = await db
+    .select()
+    .from(tickets)
+    .where(eq(tickets.customer, customer._id))
+    .orderBy(desc(tickets.createdAt))
+    .limit(10);
+
+  res.json({
+    ...customer,
+    vehicles: customerVehicles,
+    recentBookings,
+    membership: membership || null,
+    tickets: customerTickets.map(withSla),
+    openTicketCount: customerTickets.filter((t) => OPEN_STATUSES.includes(t.status)).length,
+  });
 });
 
 const createCustomer = asyncHandler(async (req, res) => {

@@ -13,6 +13,7 @@ import {
   LogOut,
   Users2,
   Bot,
+  LifeBuoy,
 } from 'lucide-react'
 
 // Role-based wash-floor views (carwash-compile/01-foundation/dashboards.md):
@@ -26,6 +27,7 @@ export const navItems = [
   { to: '/wash-queue', label: 'Wash Ops', icon: Waves, roles: ['admin', 'manager'] },
   { to: '/memberships', label: 'Memberships', icon: Users2, roles: ['admin', 'manager'] },
   { to: '/concierge', label: 'Concierge', icon: Bot, roles: ['admin', 'manager'] },
+  { to: '/tickets', label: 'Support', icon: LifeBuoy, roles: ['admin', 'manager', 'staff'] },
   { to: '/bookings', label: 'Bookings', icon: CalendarClock, roles: ['admin', 'manager', 'staff'] },
   { to: '/customers', label: 'Customers', icon: Users, roles: ['admin', 'manager', 'staff'] },
   { to: '/vehicles', label: 'Vehicles', icon: Car, roles: ['admin', 'manager', 'staff'] },
