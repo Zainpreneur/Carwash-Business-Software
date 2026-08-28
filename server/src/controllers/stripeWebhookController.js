@@ -9,6 +9,7 @@ const { getStripe, isStripeConfigured, isWebhookConfigured } = require('../confi
 const { membershipPaymentFailedDunning, membershipSuspended, membershipCancelledForNonPayment, sendMembershipWelcome } = require('../utils/automations');
 const { postMembershipCharge } = require('../services/ledgerService');
 const { evaluateFailedPayment, evaluateSucceededPayment } = require('../agents/membershipBillingAgent');
+const { recordAgentEvent } = require('../utils/agentMetrics');
 
 const nextMonth = (from = new Date()) => {
   const d = new Date(from);
@@ -57,6 +58,7 @@ const handlePaymentFailed = async (invoice) => {
     .set({ ...decision, updatedAt: new Date() })
     .where(eq(membershipSubscriptions._id, sub._id))
     .returning();
+  recordAgentEvent('membership-billing-agent', 'deterministic', decision.status === 'suspended' || decision.status === 'cancelled');
 
   if (decision.status === 'cancelled') {
     if (sub.stripeSubscriptionId && isStripeConfigured()) {

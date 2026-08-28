@@ -615,6 +615,44 @@ const stockAdjustments = pgTable('stock_adjustments', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// --- Orchestrator & advisor agents (02-intelligence/ai-agents.md's "Orchestrator" and
+// "Advisor agents" sections) — the last two clusters of the 12-agent roster this app
+// implements against real entities. `ops-orchestrator` itself makes no Claude call (its own
+// job — "routes work to the right specialist... routing only, no independent transactional
+// authority" — is deterministic aggregation, the same reasoning that kept
+// membership-billing-agent and inventory-forecaster LLM-free); `system-health-agent` needs
+// somewhere to read "the AI workforce's own operating data" from, which nothing in this app
+// logged before now.
+const agentMetrics = pgTable('agent_metrics', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  // agentName: queue-dispatch-agent | wash-concierge | membership-billing-agent |
+  // inventory-forecaster | strategy-advisor
+  agentName: text('agent_name').notNull(),
+  // source: ai-agent | deterministic-fallback (a Claude-capable agent that ran the
+  // fallback path) | deterministic (an agent — membership-billing-agent,
+  // inventory-forecaster — that never calls Claude at all)
+  source: text('source').notNull(),
+  // escalated: only meaningful for wash-concierge (whether escalate_to_human fired this turn)
+  escalated: boolean('escalated').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// strategy-advisor's own "remembers prior recommendations and their stated confidence for
+// 12 months, so it flags rather than silently contradicts an earlier stance." This table
+// *is* that memory — a real row per question asked, not a conversation transcript (advisor
+// questions are one-shot asks, not a back-and-forth chat like wash-concierge's).
+const strategyRecommendations = pgTable('strategy_recommendations', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  question: text('question').notNull(),
+  answer: text('answer').notNull(),
+  // pattern: unit-economics | scenario-comparison | root-cause-5-whys | decision-matrix | none
+  // ("none" when no Claude key is configured and the fallback message is returned instead).
+  pattern: text('pattern').notNull().default('none'),
+  confidencePercent: integer('confidence_percent'),
+  askedBy: uuid('asked_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -648,4 +686,6 @@ module.exports = {
   purchaseOrders,
   purchaseOrderLines,
   stockAdjustments,
+  agentMetrics,
+  strategyRecommendations,
 };

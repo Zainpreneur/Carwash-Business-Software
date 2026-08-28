@@ -17,6 +17,7 @@
 const { eq, and, gte } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { supplies, packageSupplyUsage, washOrders, purchaseOrders, purchaseOrderLines } = require('../db/schema');
+const { recordAgentEvent } = require('../utils/agentMetrics');
 
 const TRAILING_DAYS = 7;
 const PAR_LEVEL_DAYS = 30;
@@ -111,6 +112,7 @@ const createPurchaseOrdersFromRecommendations = async (createdBy) => {
     );
     created.push(po);
   }
+  recordAgentEvent('inventory-forecaster', 'deterministic', created.some((po) => po.status === 'draft'));
   return created;
 };
 

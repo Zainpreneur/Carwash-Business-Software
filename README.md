@@ -138,6 +138,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Membership subscriptions | `GET/POST /membership-subscriptions`, `PATCH /membership-subscriptions/:id/{pause,resume,mark-paid,cancel}` |
 | Inventory | `GET/POST /inventory/supplies`, `PUT/DELETE /inventory/supplies/:id`, `GET/POST /inventory/adjustments`, `GET/POST /inventory/purchase-orders`, `GET /inventory/purchase-orders/:id`, `PATCH /inventory/purchase-orders/:id/{approve,receive,close}`, `GET /inventory/forecast`, `POST /inventory/forecast/run` (admin/manager) |
 | Simulations | `GET /simulations/{bay-throughput,demand-forecast,staffing-capacity,membership-economics,cash-flow-forecast}`, `POST /simulations/pricing-scenario` (admin/manager) |
+| Agent ops | `GET /agent-ops/orchestrator-snapshot`, `POST /agent-ops/strategy-advisor/ask`, `GET /agent-ops/strategy-advisor/history`, `GET /agent-ops/system-health-report` (admin/manager) |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -146,7 +147,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
 | HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision`, `GET/POST /hr/payroll-runs`, `GET /hr/payroll-runs/:id` (admin/manager) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
@@ -154,10 +155,13 @@ Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays
 agent roster) and step 7 (growth/CRM) are each partial — (1) the data model +
 primary wash lifecycle, (2) role-based UI, (3) RBAC (folded into the Phase 2 work), (4) the
 lifecycle's automations, (5) the two integrations the primary lifecycle needs (Stripe,
-WhatsApp Cloud API), (6) `queue-dispatch-agent`'s overflow judgment call, `wash-concierge`
-(the customer-facing WhatsApp chat agent), `membership-billing-agent` (the past-due/
-suspended/cancelled lifecycle), and `inventory-forecaster` (reorder recommendations) — the
-latter two make **no Claude call**, see below — (7) a real support-ticket system with SLAs
+WhatsApp Cloud API), (6) seven of the 12-agent roster — `queue-dispatch-agent`'s overflow
+judgment call, `wash-concierge` (the customer-facing WhatsApp chat agent),
+`membership-billing-agent` (the past-due/suspended/cancelled lifecycle),
+`inventory-forecaster` (reorder recommendations), `ops-orchestrator` (the day's operating
+picture), and `strategy-advisor` plus `system-health-agent` (open-ended owner Q&A and a
+weekly agent-health report) — three of the seven make **no Claude call at all**, see below —
+(7) a real support-ticket system with SLAs
 that gives `wash-concierge`'s escalations somewhere to be tracked to resolution, a real
 double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that auto-posts
 from checkout, membership billing, expenses, payroll, and purchasing, a real staff roster
@@ -427,14 +431,48 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
   - **Not built**: **downtime-cost-simulator** — its own inputs (`Asset.status = 'down'`
     windows) come from `03-operations/assets-iot.md`, which needs an Asset/IoT entity this
     app doesn't have, so there's nothing to compute it from yet.
+- **Orchestrator & advisor agents** (`02-intelligence/ai-agents.md`'s "Orchestrator" and
+  "Advisor agents" sections, `server/src/agents/{opsOrchestrator,strategyAdvisor,systemHealthAgent}.js`)
+  — the last two clusters of the 12-agent roster this app implements against real entities,
+  built once the four specialist agents below existed for them to sit above.
+  - **`ops-orchestrator`** makes **no Claude call** — its own guardrail ("routing only, no
+    independent transactional authority") describes deterministic aggregation, not a
+    judgment call, the same reasoning that kept `membership-billing-agent` and
+    `inventory-forecaster` LLM-free. It aggregates real queue depth, bay status, the current
+    hour's staffing gap (from the simulation phase), unread escalation-type notifications,
+    and open tickets into one "operating picture," and deterministically names which
+    specialist/automation already owns each flagged condition — real routing logic, not a
+    narrated summary.
+  - **`strategy-advisor`** is genuinely open-ended — "answers open-ended owner questions...
+    with a structured, traceable recommendation" — so it does call Claude, grounded in a
+    single injected snapshot of real bay-throughput/membership-economics/cash-flow/staffing
+    data rather than a `wash-concierge`-style tool-use loop (an owner's question doesn't need
+    the model poking at live tables turn by turn). No tools at all — the guardrail "never
+    commits to a lease, hire, price change" is structural, not just an instruction. A new
+    `strategy_recommendations` table *is* the spec's own "remembers prior recommendations...
+    12 months" requirement: a real row per question, with a cheap word-overlap check
+    surfacing (and asking Claude to explicitly reference, not silently contradict) a related
+    earlier question. No key configured → a plain fallback message pointing at the
+    Finance/Simulations/Reports pages directly, not a blocked request.
+  - **`system-health-agent`** also calls Claude (root-cause-5-whys: is a rate "off," and if
+    so, why — a real judgment call) to narrate a weekly report over a new `agent_metrics`
+    table — nothing logged agent invocations before this phase, so every credential-gated
+    agent (`queue-dispatch-agent`, `wash-concierge`, `membership-billing-agent`,
+    `inventory-forecaster`, `strategy-advisor`) now records one row per call
+    (`server/src/utils/agentMetrics.js`, fire-and-forget). Its own system prompt explicitly
+    refuses the spec's named anti-pattern — "never propose lowering an escalation-confidence
+    threshold as the fix for a high escalation rate." No key configured → the raw computed
+    per-agent rates without a narrative, still a real report, just not written up.
+  - Both agents' real triggers ("every 5 minutes," "weekly, Monday 6am") need a scheduler
+    this app doesn't have (the same documented gap as the -3d/-2h reminder jobs and
+    proactive SLA alerts) — a site-manager runs both on demand from the new `/ops-center`
+    page instead.
 - **Not built yet** (later phases per the spec's own build order): the rest of the AI agent
   roster (`predictive-maintenance-agent` and `quality-anomaly-detector` — need IoT telemetry
   this app has no sensors for; `review-response-agent`, `phone-line-agent`,
-  `fleet-lead-scorer` — need channels/entities this app doesn't have; `ops-orchestrator` and
-  the two advisor agents — proportionate once the specialist roster is fuller, per the
-  spec's own guidance, not yet at this stage); the wash-sensor/IoT platform; the -3d/-2h
-  reminder jobs and proactive SLA-breach alerting (need a scheduler this app doesn't run
-  yet); and social/marketing —
+  `fleet-lead-scorer` — need channels/entities this app doesn't have); the wash-sensor/IoT
+  platform; the -3d/-2h reminder jobs and proactive SLA-breach alerting (need a scheduler
+  this app doesn't run yet); and social/marketing —
   and RBAC only covers this app's existing admin/manager/staff login roles, not the spec's
   full 7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
   Technician/Cashier/Fleet Account Manager) — the new `Employee.position` field captures the
