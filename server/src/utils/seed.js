@@ -1,7 +1,19 @@
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { connectDB, pool, db } = require('../config/db');
-const { users, customers, vehicles, services, bookings, bookingServices, expenses } = require('../db/schema');
+const {
+  users,
+  customers,
+  vehicles,
+  services,
+  bookings,
+  bookingServices,
+  expenses,
+  washPackages,
+  packagePricing,
+  serviceBays,
+  washOrders,
+} = require('../db/schema');
 
 const servicesSeed = [
   { name: 'Express Wash', category: 'basic', price: 15, durationMinutes: 20, description: 'Quick exterior rinse & dry' },
@@ -22,7 +34,7 @@ const run = async () => {
   console.log('Seeding database...');
 
   await pool.query(
-    'TRUNCATE booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
+    'TRUNCATE wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
   );
 
   const insertedUsers = await db
@@ -148,6 +160,79 @@ const run = async () => {
     });
   }
   await db.insert(expenses).values(expenseRows);
+
+  // --- SplashPoint wash-floor module (Phase 1 demo data) ---
+  const packageSeed = [
+    { tier: 'express-exterior', name: 'Express Exterior', deliveryLane: 'tunnel', includesInterior: false, avgCycleTimeMinutes: 8,
+      pricing: { 'sedan-coupe': 12, 'suv-truck': 15, 'van-oversized': 18 } },
+    { tier: 'exterior-plus', name: 'Exterior Plus', deliveryLane: 'tunnel', includesInterior: false, avgCycleTimeMinutes: 12,
+      pricing: { 'sedan-coupe': 20, 'suv-truck': 24, 'van-oversized': 28 } },
+    { tier: 'signature-full-service', name: 'Signature Full-Service', deliveryLane: 'detail-bay', includesInterior: true, avgCycleTimeMinutes: 45,
+      pricing: { 'sedan-coupe': 45, 'suv-truck': 55, 'van-oversized': 65 } },
+    { tier: 'premium-hand-detail', name: 'Premium Hand Detail', deliveryLane: 'detail-bay', includesInterior: true, avgCycleTimeMinutes: 90,
+      pricing: { 'sedan-coupe': 90, 'suv-truck': 110, 'van-oversized': 130 } },
+  ];
+  const createdPackages = await db
+    .insert(washPackages)
+    .values(packageSeed.map(({ pricing, ...p }) => p))
+    .returning();
+  await db.insert(packagePricing).values(
+    createdPackages.flatMap((pkg, i) =>
+      Object.entries(packageSeed[i].pricing).map(([vehicleType, price]) => ({
+        package: pkg._id,
+        vehicleType,
+        price,
+      }))
+    )
+  );
+
+  const bayRows = [
+    ...[1, 2, 3, 4].map((n) => ({ bayNumber: n, bayType: 'tunnel-conveyor', operationalStatus: 'operational', avgThroughputPerHour: 12 })),
+    ...[5, 6].map((n) => ({ bayNumber: n, bayType: 'detail-bay', operationalStatus: 'operational', avgThroughputPerHour: 1.3 })),
+  ];
+  const createdBays = await db.insert(serviceBays).values(bayRows).returning();
+  const bayByNumber = new Map(createdBays.map((b) => [b.bayNumber, b]));
+
+  // sedan/coupe -> sedan-coupe ; suv/truck -> suv-truck ; van -> van-oversized ;
+  // motorcycle/other -> quoted manually (no pricing row), per the spec's assumptions.
+  const tierFor = (vehicleType) =>
+    ({ sedan: 'sedan-coupe', suv: 'suv-truck', truck: 'suv-truck', van: 'van-oversized' })[vehicleType] || null;
+  const priceFor = (pkgIndex, vehicleType) => {
+    const tier = tierFor(vehicleType);
+    return tier ? packageSeed[pkgIndex].pricing[tier] : 35; // manual-quote fallback for out-of-tier vehicles
+  };
+
+  const woDate = (h, m = 0) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+  const orderNo = (n) =>
+    `WO${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(n).padStart(3, '0')}`;
+
+  const wo = (n, overrides) => {
+    const vehicle = randomFrom(createdVehicles);
+    return {
+      orderNumber: orderNo(n),
+      customer: vehicle.customer,
+      vehicle: vehicle._id,
+      bookingType: 'walk-in',
+      paymentMethod: randomFrom(['cash', 'card', 'membership']),
+      createdBy: admin._id,
+      ...overrides,
+      price: overrides.price ?? priceFor(overrides.packageIdx, vehicle.type),
+    };
+  };
+
+  const washOrderSeed = [
+    wo(1, { packageIdx: 0, package: createdPackages[0]._id, status: 'queued', queuePosition: 1, queuedAt: woDate(9, 5) }),
+    wo(2, { packageIdx: 1, package: createdPackages[1]._id, status: 'queued', queuePosition: 2, queuedAt: woDate(9, 10) }),
+    wo(3, { packageIdx: 0, package: createdPackages[0]._id, status: 'bay-assigned', queuePosition: 3, bay: bayByNumber.get(1)._id, queuedAt: woDate(8, 50), bayAssignedAt: woDate(8, 55) }),
+    wo(4, { packageIdx: 1, package: createdPackages[1]._id, status: 'in-wash', queuePosition: 4, bay: bayByNumber.get(2)._id, queuedAt: woDate(8, 40), bayAssignedAt: woDate(8, 45), washStartedAt: woDate(8, 47) }),
+    wo(5, { packageIdx: 2, package: createdPackages[2]._id, status: 'in-wash', queuePosition: 5, bay: bayByNumber.get(5)._id, bookingType: 'appointment', scheduledFor: woDate(9, 0), queuedAt: woDate(8, 55), bayAssignedAt: woDate(9, 0), washStartedAt: woDate(9, 2) }),
+    wo(6, { packageIdx: 0, package: createdPackages[0]._id, status: 'quality-check', queuePosition: 6, bay: bayByNumber.get(3)._id, queuedAt: woDate(8, 30), bayAssignedAt: woDate(8, 33), washStartedAt: woDate(8, 35), washCompletedAt: woDate(8, 43) }),
+    wo(7, { packageIdx: 3, package: createdPackages[3]._id, status: 'ready-for-pickup', queuePosition: 7, bay: bayByNumber.get(6)._id, bookingType: 'appointment', scheduledFor: woDate(8, 0), queuedAt: woDate(8, 0), bayAssignedAt: woDate(8, 2), washStartedAt: woDate(8, 5), washCompletedAt: woDate(9, 30), qcResult: 'pass' }),
+    wo(8, { packageIdx: 0, package: createdPackages[0]._id, status: 'completed', queuePosition: 8, queuedAt: woDate(7, 40), bayAssignedAt: woDate(7, 42), washStartedAt: woDate(7, 44), washCompletedAt: woDate(7, 52), checkedOutAt: woDate(7, 55), qcResult: 'pass', paymentMethod: 'card' }),
+    wo(9, { packageIdx: 1, package: createdPackages[1]._id, status: 'completed', queuePosition: 9, queuedAt: woDate(7, 10), bayAssignedAt: woDate(7, 12), washStartedAt: woDate(7, 14), washCompletedAt: woDate(7, 24), checkedOutAt: woDate(7, 27), qcResult: 'pass', paymentMethod: 'membership' }),
+    wo(10, { packageIdx: 0, package: createdPackages[0]._id, status: 'cancelled', queuePosition: 10, queuedAt: woDate(7, 0) }),
+  ];
+  await db.insert(washOrders).values(washOrderSeed.map(({ packageIdx, ...row }) => row));
 
   console.log('Seed complete!');
   console.log('---------------------------------');

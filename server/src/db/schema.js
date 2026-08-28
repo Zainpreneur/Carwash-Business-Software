@@ -125,4 +125,99 @@ const notifications = pgTable('notifications', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-module.exports = { users, customers, vehicles, services, bookings, bookingServices, expenses, notifications };
+// --- SplashPoint wash-floor module (compiled spec, Phase 1: WashOrder/Vehicle/Customer/
+// ServiceBay primary lifecycle only — see carwash-compile/01-foundation/data-model.md).
+// Statuses/enums are lower-kebab-case to match this app's existing convention; they map
+// 1:1 to the spec's PascalCase state names (e.g. "bay-assigned" = BayAssigned).
+
+const washPackages = pgTable('wash_packages', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  // tier: express-exterior | exterior-plus | signature-full-service | premium-hand-detail
+  tier: text('tier').notNull(),
+  name: text('name').notNull(),
+  // deliveryLane: tunnel | detail-bay — which lane type this package runs in
+  deliveryLane: text('delivery_lane').notNull().default('tunnel'),
+  includesInterior: boolean('includes_interior').notNull().default(false),
+  avgCycleTimeMinutes: integer('avg_cycle_time_minutes').notNull().default(15),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// PackagePricing join entity: a package's price varies by 3-tier vehicle size
+// (sedan-coupe | suv-truck | van-oversized — motorcycles/oversized rigs are quoted
+// manually per the spec's assumptions, so they have no row here).
+const packagePricing = pgTable('package_pricing', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  package: uuid('package_id')
+    .notNull()
+    .references(() => washPackages._id, { onDelete: 'cascade' }),
+  vehicleType: text('vehicle_type').notNull(),
+  price: doublePrecision('price').notNull(),
+});
+
+const serviceBays = pgTable('service_bays', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  bayNumber: integer('bay_number').notNull().unique(),
+  // bayType: tunnel-conveyor | detail-bay
+  bayType: text('bay_type').notNull().default('tunnel-conveyor'),
+  // operationalStatus: operational | degraded | down | retired
+  operationalStatus: text('operational_status').notNull().default('operational'),
+  avgThroughputPerHour: doublePrecision('avg_throughput_per_hour'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// WashOrder: the primary lifecycle entity — a vehicle's trip through the wash.
+// State machine (terminal: completed, cancelled):
+//   queued -> bay-assigned -> in-wash -> quality-check -> ready-for-pickup -> completed
+//   quality-check -> in-wash (qc failed, rework)
+//   queued | bay-assigned -> cancelled
+const washOrders = pgTable('wash_orders', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  orderNumber: text('order_number').notNull().unique(),
+  // nullable — anonymous walk-in cash wash is allowed per the spec
+  customer: uuid('customer_id').references(() => customers._id, { onDelete: 'set null' }),
+  vehicle: uuid('vehicle_id')
+    .notNull()
+    .references(() => vehicles._id, { onDelete: 'cascade' }),
+  package: uuid('package_id')
+    .notNull()
+    .references(() => washPackages._id, { onDelete: 'restrict' }),
+  bay: uuid('bay_id').references(() => serviceBays._id, { onDelete: 'set null' }),
+  assignedTechnician: uuid('assigned_technician_id').references(() => users._id, { onDelete: 'set null' }),
+  // bookingType: walk-in | appointment
+  bookingType: text('booking_type').notNull().default('walk-in'),
+  scheduledFor: timestamp('scheduled_for', { withTimezone: true }),
+  queuePosition: integer('queue_position'),
+  queuedAt: timestamp('queued_at', { withTimezone: true }).notNull().defaultNow(),
+  bayAssignedAt: timestamp('bay_assigned_at', { withTimezone: true }),
+  washStartedAt: timestamp('wash_started_at', { withTimezone: true }),
+  washCompletedAt: timestamp('wash_completed_at', { withTimezone: true }),
+  checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
+  status: text('status').notNull().default('queued'),
+  // qcResult: pass | fail — set by a human technician only
+  qcResult: text('qc_result'),
+  price: doublePrecision('price').notNull(),
+  // paymentMethod: membership | card | cash | fleet-invoice
+  paymentMethod: text('payment_method').notNull().default('cash'),
+  promoCode: text('promo_code'),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+module.exports = {
+  users,
+  customers,
+  vehicles,
+  services,
+  bookings,
+  bookingServices,
+  expenses,
+  notifications,
+  washPackages,
+  packagePricing,
+  serviceBays,
+  washOrders,
+};

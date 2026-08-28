@@ -2,9 +2,9 @@
 
 A full-stack, fully responsive web application for managing a car wash business: bookings, customers, vehicles, service catalog, staff, expenses, and revenue reporting.
 
-Built with the **MERN** stack:
+Built with:
 
-- **Backend:** Node.js, Express, MongoDB (Mongoose), JWT authentication
+- **Backend:** Node.js, Express, PostgreSQL (Drizzle ORM), JWT authentication
 - **Frontend:** React 19 (Vite), React Router, Tailwind CSS v4, Recharts, Axios
 
 ## Features
@@ -24,13 +24,14 @@ Built with the **MERN** stack:
 
 ```
 Carwash-Claude/
-├── server/          Express API (REST, JWT auth, MongoDB via Mongoose)
+├── carwash-compile/ Compiled SplashPoint business-OS spec (see below)
+├── server/          Express API (REST, JWT auth, PostgreSQL via Drizzle ORM)
 │   └── src/
-│       ├── models/       Mongoose schemas
-│       ├── controllers/  Route handlers / business logic
-│       ├── routes/       Express routers
-│       ├── middleware/   Auth guard, error handler
-│       └── utils/        Token helper, database seed script
+│       ├── db/            Drizzle table schema + Postgres pool/client
+│       ├── controllers/    Route handlers / business logic
+│       ├── routes/         Express routers
+│       ├── middleware/     Auth guard, error handler
+│       └── utils/          Token helper, notify helper, database seed script
 ├── client/          React (Vite) SPA
 │   └── src/
 │       ├── pages/         Route-level screens
@@ -45,14 +46,15 @@ Carwash-Claude/
 ### Prerequisites
 
 - Node.js 18+
-- A running MongoDB instance (local `mongod`, Docker, or Atlas)
+- A running PostgreSQL instance (local `postgres`, Docker, or a hosted Postgres like Supabase/Neon/RDS)
 
 ### 1. Backend
 
 ```bash
 cd server
-cp .env.example .env     # edit MONGO_URI / JWT_SECRET as needed
+cp .env.example .env     # edit DATABASE_URL / JWT_SECRET as needed
 npm install
+npm run db:push            # syncs the Drizzle schema to your database
 npm run seed              # populates demo data + accounts (optional but recommended)
 npm run dev                # starts on http://localhost:5000
 ```
@@ -84,7 +86,9 @@ Sign in at `http://localhost:5173/login`, or click a "Quick demo login" button t
 docker compose up --build
 ```
 
-This starts MongoDB, the API (port 5000), and the client served via Nginx (port 8080).
+This starts PostgreSQL, the API (port 5000 — pushing its schema and applying it on every
+boot), and the client served via Nginx (port 8080). Run `docker compose exec server npm run
+seed` once the stack is up if you want demo data.
 
 ## Environment variables
 
@@ -93,7 +97,7 @@ This starts MongoDB, the API (port 5000), and the client served via Nginx (port 
 | Variable          | Description                          |
 |-------------------|---------------------------------------|
 | `PORT`            | API port (default 5000)               |
-| `MONGO_URI`       | MongoDB connection string             |
+| `DATABASE_URL`    | PostgreSQL connection string          |
 | `JWT_SECRET`      | Secret used to sign JWTs              |
 | `JWT_EXPIRES_IN`  | Token lifetime (e.g. `7d`)            |
 | `CLIENT_URL`      | Allowed CORS origin                   |
@@ -118,6 +122,28 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Bookings     | `GET/POST /bookings`, `GET/PUT/DELETE /bookings/:id`, `PATCH /bookings/:id/status`, `PATCH /bookings/:id/payment` |
 | Expenses     | `GET/POST /expenses`, `PUT/DELETE /expenses/:id` |
 | Dashboard    | `GET /dashboard/summary`, `/revenue-chart`, `/service-breakdown`, `/status-breakdown`, `/upcoming-bookings` |
+| Notifications | `GET /notifications`, `/notifications/unread-count`, `PATCH /notifications/:id/read`, `/notifications/read-all` |
+| Wash packages | `GET/POST /wash-packages`, `GET/PUT/DELETE /wash-packages/:id` (each carries 3-tier pricing) |
+| Service bays | `GET /service-bays`, `POST /service-bays`, `PUT/DELETE /service-bays/:id` |
+| Wash orders  | `GET/POST /wash-orders`, `GET/DELETE /wash-orders/:id`, `PATCH /wash-orders/:id/{assign-bay,start-wash,complete-wash,qc,checkout,cancel}` |
+
+## SplashPoint Wash Queue (spec Phase 1)
+
+`carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
+Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide recommends building
+in phases rather than all at once; **Phase 1 — the data model and primary wash lifecycle — is
+built and live** as an additive module alongside the existing booking-based app:
+
+- **Data model**: `WashPackage` (+ 3-tier `PackagePricing`), `ServiceBay`, `WashOrder` — see
+  `carwash-compile/01-foundation/data-model.md` for the source spec.
+- **Lifecycle** (`/wash-queue` in the sidebar): queue-entry → auto bay assignment (matched to
+  the package's tunnel/detail-bay lane) → start wash → complete wash → quality check
+  (pass → ready for pickup, fail → looped back to rework) → checkout, plus cancel from
+  Queued/BayAssigned. State transitions are enforced server-side (`washOrderController.js`).
+- **Not built yet** (later phases per the spec's own build order): role-specific dashboards
+  beyond this single queue view, RBAC beyond the existing admin/manager/staff roles,
+  `MembershipSubscription` billing, AI agents, IoT/predictive maintenance, WhatsApp/social/CRM,
+  the accounting ledger, and HR/payroll.
 
 ## Responsiveness
 

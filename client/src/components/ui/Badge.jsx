@@ -25,6 +25,18 @@ const statusColor = {
   admin: 'purple',
   manager: 'blue',
   staff: 'slate',
+  // wash-order lifecycle (carwash-compile/01-foundation/data-model.md)
+  queued: 'amber',
+  'bay-assigned': 'blue',
+  'in-wash': 'purple',
+  'quality-check': 'cyan',
+  'ready-for-pickup': 'green',
+  pass: 'green',
+  fail: 'red',
+  operational: 'green',
+  degraded: 'amber',
+  down: 'red',
+  retired: 'slate',
 }
 
 const Badge = ({ children, color, status, className = '' }) => {
