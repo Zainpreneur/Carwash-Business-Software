@@ -85,6 +85,30 @@ const membershipPaymentFailedDunning = async (subscription) => {
   });
 };
 
+// membershipBillingAgent.js's suspend/cancel-for-nonpayment transitions. No WhatsApp send
+// here — 04-growth/whatsapp.md's template table doesn't define one for either event (only
+// `payment-failed-update-card`, sent above on every retry up to this point), so this is
+// staff-facing only rather than inventing a template the spec never specified.
+const membershipSuspended = async (subscription) => {
+  const [customer] = await db.select().from(customers).where(eq(customers._id, subscription.customer));
+  const [plan] = await db.select().from(membershipPlans).where(eq(membershipPlans._id, subscription.plan));
+  await notifyRoles(['admin', 'manager'], {
+    type: 'membership_suspended',
+    title: 'Membership suspended',
+    message: `${customer?.name || 'A customer'}'s ${plan?.name || 'membership'} was suspended after unresolved payment failures.`,
+  });
+};
+
+const membershipCancelledForNonPayment = async (subscription) => {
+  const [customer] = await db.select().from(customers).where(eq(customers._id, subscription.customer));
+  const [plan] = await db.select().from(membershipPlans).where(eq(membershipPlans._id, subscription.plan));
+  await notifyRoles(['admin', 'manager'], {
+    type: 'membership_cancelled_nonpayment',
+    title: 'Membership cancelled (non-payment)',
+    message: `${customer?.name || 'A customer'}'s ${plan?.name || 'membership'} was cancelled after 30 days unresolved.`,
+  });
+};
+
 // queue-wait-alert: fires when queueLength > 8 or predictedWaitMinutes > 20, notifying
 // site-manager-equivalent roles. Deduped to at most one alert per 15-minute window so it
 // doesn't refire on every single queue-changing request while the condition still holds.
@@ -221,5 +245,7 @@ module.exports = {
   checkQueueWaitAlert,
   handleBayDown,
   membershipPaymentFailedDunning,
+  membershipSuspended,
+  membershipCancelledForNonPayment,
   sendMembershipWelcome,
 };

@@ -135,7 +135,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Service bays | `GET /service-bays`, `POST /service-bays`, `PUT/DELETE /service-bays/:id` |
 | Wash orders  | `GET/POST /wash-orders`, `GET /wash-orders/checkout-stats`, `GET /wash-orders/customer-messages`, `GET/DELETE /wash-orders/:id`, `PATCH /wash-orders/:id/{assign-bay,start-wash,complete-wash,qc,checkout,cancel}` |
 | Membership plans | `GET/POST /membership-plans`, `GET/PUT/DELETE /membership-plans/:id` |
-| Membership subscriptions | `GET/POST /membership-subscriptions`, `PATCH /membership-subscriptions/:id/{pause,resume,cancel}` |
+| Membership subscriptions | `GET/POST /membership-subscriptions`, `PATCH /membership-subscriptions/:id/{pause,resume,mark-paid,cancel}` |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -148,18 +148,19 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
-8-step build order; **steps 1–5, the two highest-leverage agents from step 6, the CRM
-Ticket entity from step 7, a real accounting ledger, and HR & payroll are built and live**
-as an additive module alongside the existing booking-based app — (1) the data model +
-primary wash lifecycle, (2) role-based UI, (3) RBAC (folded into the Phase 2 work), (4) the
-lifecycle's automations, (5) the two integrations the primary lifecycle needs (Stripe,
-WhatsApp Cloud API), (6) `queue-dispatch-agent`'s
-overflow judgment call plus `wash-concierge`, the customer-facing WhatsApp chat agent,
-(7) a real support-ticket system with SLAs that gives `wash-concierge`'s escalations
-somewhere to be tracked to resolution, a real double-entry accounting ledger
-(`carwash-compile/05-finance/accounting.md`) that auto-posts from checkout, membership
-billing, and expenses, and a real staff roster with scheduling, leave, and a payroll run
-that posts to that same ledger (`carwash-compile/03-operations/hr.md`). All of Stripe,
+8-step build order; **steps 1–5, three of step 6's agents, the CRM Ticket entity from step
+7, a real accounting ledger, and HR & payroll are built and live** as an additive module
+alongside the existing booking-based app — (1) the data model + primary wash lifecycle,
+(2) role-based UI, (3) RBAC (folded into the Phase 2 work), (4) the lifecycle's
+automations, (5) the two integrations the primary lifecycle needs (Stripe, WhatsApp Cloud
+API), (6) `queue-dispatch-agent`'s overflow judgment call, `wash-concierge` (the
+customer-facing WhatsApp chat agent), and `membership-billing-agent` (the past-due/
+suspended/cancelled lifecycle — no Claude call, see below), (7) a real support-ticket
+system with SLAs that gives `wash-concierge`'s escalations somewhere to be tracked to
+resolution, a real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`)
+that auto-posts from checkout, membership billing, and expenses, and a real staff roster
+with scheduling, leave, and a payroll run that posts to that same ledger
+(`carwash-compile/03-operations/hr.md`). All of Stripe,
 WhatsApp, and the AI agents are **credential-gated**: this session has none of the
 underlying real accounts, so each feature runs in a graceful fallback mode until real keys
 are added to `server/.env` — nothing crashes or silently
@@ -217,8 +218,9 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
   - `GET /api/integrations/status` reports live connection state — shown as a banner on
     `/memberships` — so nothing pretends to be connected when it isn't.
 - **AI agents** (`carwash-compile/02-intelligence/ai-agents.md`, `server/src/agents/`) —
-  the two highest-leverage agents, per the deployment guide's own "AI agents, highest-leverage
-  first" ordering: `queue-dispatch-agent` and `wash-concierge`.
+  the two highest-leverage agents per the deployment guide's own "AI agents, highest-leverage
+  first" ordering (`queue-dispatch-agent`, `wash-concierge`), plus `membership-billing-agent`
+  once the Ticket/HR/finance phases gave the roster's other entities somewhere to live.
   - `queue-dispatch-agent`'s mechanical job (assign a queued vehicle to the next open bay)
     was already deterministic code since Phase 1 — a well-suited task for a rule, not an
     LLM. What's genuinely judgment-shaped is the spec's own overflow guardrail ("escalates to
@@ -250,6 +252,22 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
     separate platform feature, not a conversational capability — and a real
     `knowledge_base.search` tool (no KB entity built yet); FAQ content is folded into the
     system prompt instead.
+  - `membership-billing-agent` (`server/src/agents/membershipBillingAgent.js`) manages the
+    past-due → suspended → cancelled lifecycle on a failed membership charge — but makes
+    **no Claude call at all**. The spec's own description of this agent is pure threshold/
+    state-machine logic (3 failed attempts or 7 days unresolved → suspend, never cancel
+    before that; 30 days unresolved → cancel) with no natural-language judgment call
+    anywhere in it — the same automations-vs-agents distinction drawn everywhere else in
+    this app (e.g. `queue-dispatch-agent`'s actual bay assignment is deterministic code;
+    only its overflow *recommendation* calls Claude). Retrying the charge itself is Stripe's
+    own job (Smart Retries); this only reacts to the `invoice.payment_failed`/
+    `invoice.payment_succeeded` webhook events already wired in Phase 5, evaluating the
+    state machine on each one. A new `PATCH /membership-subscriptions/:id/mark-paid` lets
+    staff resolve a past-due/suspended member manually (cash at the counter) — the state
+    machine's own "active (paid manually)" exit. **Not built**: a customer-facing WhatsApp
+    notice on suspension/cancellation (the spec's own template table doesn't define one for
+    either event, only for a payment-failure retry — sending one would mean inventing
+    content the spec never specified).
 - **CRM & support** (`carwash-compile/04-growth/crm.md`, `server/src/controllers/ticketController.js`)
   — a real `Ticket` entity (damage claims, billing disputes, quality complaints, membership
   questions), state-machined `open → in-progress → waiting-on-customer/resolved → closed`
@@ -334,9 +352,13 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
     annual performance-review workflow (the spec's own text says not to build this as a
     standing agent at this scale either).
 - **Not built yet** (later phases per the spec's own build order): the rest of the AI agent
-  roster (`membership-billing-agent`, `predictive-maintenance-agent` — needs IoT telemetry —
-  and the other 8); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and proactive
-  SLA-breach alerting (need a scheduler this app doesn't run yet); and social/marketing —
+  roster (`predictive-maintenance-agent` and `quality-anomaly-detector` — need IoT telemetry
+  this app has no sensors for; `inventory-forecaster` — needs an inventory module;
+  `review-response-agent`, `phone-line-agent`, `fleet-lead-scorer` — need channels/entities
+  this app doesn't have; `ops-orchestrator` and the two advisor agents — proportionate once
+  the specialist roster is fuller, per the spec's own guidance, not yet at this stage); the
+  wash-sensor/IoT platform; the -3d/-2h reminder jobs and proactive SLA-breach alerting (need
+  a scheduler this app doesn't run yet); and social/marketing —
   and RBAC only covers this app's existing admin/manager/staff login roles, not the spec's
   full 7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
   Technician/Cashier/Fleet Account Manager) — the new `Employee.position` field captures the

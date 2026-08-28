@@ -59,6 +59,10 @@ const statusColor = {
   // leave request decision
   approved: 'green',
   denied: 'red',
+  // membership subscription lifecycle (01-foundation/data-model.md)
+  'past-due': 'amber',
+  suspended: 'red',
+  paused: 'cyan',
 }
 
 const Badge = ({ children, color, status, className = '' }) => {

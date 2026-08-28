@@ -281,6 +281,12 @@ const membershipSubscriptions = pgTable('membership_subscriptions', {
   pausedUntil: timestamp('paused_until', { withTimezone: true }),
   washesThisCycle: integer('washes_this_cycle').notNull().default(0),
   failedPaymentAttempts: integer('failed_payment_attempts').notNull().default(0),
+  // Set the moment a subscription first goes past-due; cleared on any return to active.
+  // membershipBillingAgent.js reads this to evaluate the "7 days unresolved" / "30 days
+  // unresolved" clauses of the state machine above — this app has no scheduler to walk the
+  // calendar and check every subscription proactively, so the clock only advances on each
+  // new payment-failed event the real Stripe account sends, not silently in the background.
+  firstFailedAt: timestamp('first_failed_at', { withTimezone: true }),
   status: text('status').notNull().default('active'),
   stripeSubscriptionId: text('stripe_subscription_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

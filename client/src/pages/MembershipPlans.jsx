@@ -197,7 +197,7 @@ const MembershipPlans = () => {
                     <td>{s.vehicle.plateNumber}</td>
                     <td>{s.plan.name}</td>
                     <td>{s.nextBillingDate ? new Date(s.nextBillingDate).toLocaleDateString() : '—'}</td>
-                    <td><Badge status={s.status === 'past-due' ? 'unpaid' : s.status === 'active' ? 'active' : 'inactive'}>{s.status}</Badge></td>
+                    <td><Badge status={s.status}>{s.status}</Badge></td>
                     <td>
                       <div className="flex justify-end gap-1">
                         {s.status === 'active' && (
@@ -208,6 +208,11 @@ const MembershipPlans = () => {
                         {s.status === 'paused' && (
                           <button disabled={busyId === s._id} onClick={() => runSubAction(s._id, () => membershipSubscriptionsApi.resume(s._id), 'Resumed')} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" title="Resume">
                             <PlayCircle size={15} />
+                          </button>
+                        )}
+                        {['past-due', 'suspended'].includes(s.status) && (
+                          <button disabled={busyId === s._id} onClick={() => runSubAction(s._id, () => membershipSubscriptionsApi.markPaid(s._id), 'Marked as paid')} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" title="Mark paid (e.g. cash at counter)">
+                            <CreditCard size={15} />
                           </button>
                         )}
                         {['active', 'past-due', 'suspended', 'paused'].includes(s.status) && (

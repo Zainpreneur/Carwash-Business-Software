@@ -311,6 +311,21 @@ const run = async () => {
     .returning();
   await postMembershipCharge(createdSubscription, membershipPlanSeed[0].monthlyPrice, 'Basic Unlimited membership charge');
 
+  // A second member, already 2 days into a payment failure — demonstrates
+  // membershipBillingAgent.js's lifecycle in the /memberships UI without needing a real
+  // Stripe webhook to get there.
+  const pastDueVehicle = createdVehicles[2];
+  await db.insert(membershipSubscriptions).values({
+    customer: pastDueVehicle.customer,
+    vehicle: pastDueVehicle._id,
+    plan: createdPlans[1]._id,
+    billingDayOfMonth: now.getDate(),
+    nextBillingDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2),
+    failedPaymentAttempts: 1,
+    firstFailedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+    status: 'past-due',
+  });
+
   // --- HR & payroll (03-operations/hr.md demo data) ---
   const employeeSeed = [
     { user: staffMembers[0]._id, name: staffMembers[0].name, phone: staffMembers[0].phone, position: 'bay-attendant', status: 'active', hireDate: new Date(now.getFullYear() - 1, 2, 10), hourlyRate: 16 },

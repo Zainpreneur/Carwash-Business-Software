@@ -48,6 +48,7 @@ export const membershipSubscriptionsApi = {
   create: (data) => apiClient.post('/membership-subscriptions', data).then((r) => r.data),
   pause: (id, pausedUntil) => apiClient.patch(`/membership-subscriptions/${id}/pause`, { pausedUntil }).then((r) => r.data),
   resume: (id) => apiClient.patch(`/membership-subscriptions/${id}/resume`).then((r) => r.data),
+  markPaid: (id) => apiClient.patch(`/membership-subscriptions/${id}/mark-paid`).then((r) => r.data),
   cancel: (id) => apiClient.patch(`/membership-subscriptions/${id}/cancel`).then((r) => r.data),
 }
 
