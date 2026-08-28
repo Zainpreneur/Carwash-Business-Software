@@ -55,6 +55,11 @@ export const integrationsApi = {
   status: () => apiClient.get('/integrations/status').then((r) => r.data),
 }
 
+export const conciergeApi = {
+  conversations: () => apiClient.get('/concierge/conversations').then((r) => r.data),
+  simulate: (fromPhone, text) => apiClient.post('/concierge/simulate', { fromPhone, text }).then((r) => r.data),
+}
+
 export const washOrdersApi = {
   ...makeResource('/wash-orders'),
   assignBay: (id, bayId) => apiClient.patch(`/wash-orders/${id}/assign-bay`, bayId ? { bayId } : {}).then((r) => r.data),
