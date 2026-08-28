@@ -1,6 +1,8 @@
 const express = require('express');
 const {
   getWashOrders,
+  getCheckoutStats,
+  getCustomerMessages,
   getWashOrder,
   createWashOrder,
   assignBay,
@@ -17,6 +19,9 @@ const router = express.Router();
 
 router.use(protect);
 router.route('/').get(getWashOrders).post(createWashOrder);
+// Must be registered before /:id or Express would swallow these as an :id lookup.
+router.get('/checkout-stats', getCheckoutStats);
+router.get('/customer-messages', authorize('admin', 'manager'), getCustomerMessages);
 router.route('/:id').get(getWashOrder).delete(authorize('admin', 'manager'), deleteWashOrder);
 
 // wash-a-vehicle lifecycle transitions

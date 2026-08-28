@@ -34,7 +34,7 @@ const run = async () => {
   console.log('Seeding database...');
 
   await pool.query(
-    'TRUNCATE wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
+    'TRUNCATE customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
   );
 
   const insertedUsers = await db
@@ -68,6 +68,7 @@ const run = async () => {
         phone: `555-02${String(i).padStart(2, '0')}`,
         address: `${100 + i} Main St, Springfield`,
         loyaltyPoints: Math.floor(Math.random() * 200),
+        whatsappOptIn: i % 4 !== 0, // a few opted-out customers to exercise the automation gate
       }))
     )
     .returning();

@@ -2,10 +2,8 @@ const asyncHandler = require('express-async-handler');
 const { eq, and, inArray } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { serviceBays, washOrders, vehicles, customers, washPackages } = require('../db/schema');
-
-// A bay's "current" wash order is derived (not stored) — whichever active, non-terminal
-// order references it. Avoids a circular FK between service_bays and wash_orders.
-const ACTIVE_STATUSES = ['bay-assigned', 'in-wash', 'quality-check', 'ready-for-pickup'];
+const { ACTIVE_STATUSES } = require('../utils/bays');
+const { handleBayDown } = require('../utils/automations');
 
 const getServiceBays = asyncHandler(async (req, res) => {
   const bays = await db.select().from(serviceBays).orderBy(serviceBays.bayNumber);
@@ -51,6 +49,12 @@ const createServiceBay = asyncHandler(async (req, res) => {
 
 const updateServiceBay = asyncHandler(async (req, res) => {
   const { bayNumber, bayType, operationalStatus, avgThroughputPerHour } = req.body;
+  const [existing] = await db.select().from(serviceBays).where(eq(serviceBays._id, req.params.id));
+  if (!existing) {
+    res.status(404);
+    throw new Error('Service bay not found');
+  }
+
   const updates = { updatedAt: new Date() };
   if (bayNumber !== undefined) updates.bayNumber = bayNumber;
   if (bayType !== undefined) updates.bayType = bayType;
@@ -58,10 +62,13 @@ const updateServiceBay = asyncHandler(async (req, res) => {
   if (avgThroughputPerHour !== undefined) updates.avgThroughputPerHour = avgThroughputPerHour;
 
   const [updated] = await db.update(serviceBays).set(updates).where(eq(serviceBays._id, req.params.id)).returning();
-  if (!updated) {
-    res.status(404);
-    throw new Error('Service bay not found');
+
+  // bay-down-reroute (03-operations/automations.md): fires on the operational-status
+  // transition into "down", not on every edit.
+  if (operationalStatus === 'down' && existing.operationalStatus !== 'down') {
+    handleBayDown(updated, req.user._id).catch(() => {});
   }
+
   res.json(updated);
 });
 

@@ -33,6 +33,9 @@ const customers = pgTable('customers', {
   totalSpent: doublePrecision('total_spent').notNull().default(0),
   visitCount: integer('visit_count').notNull().default(0),
   active: boolean('active').notNull().default(true),
+  // gates transactional WhatsApp messaging (carwash-compile/01-foundation/data-model.md);
+  // used by the notify-ready-for-pickup automation.
+  whatsappOptIn: boolean('whatsapp_opt_in').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -207,6 +210,24 @@ const washOrders = pgTable('wash_orders', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Outbound customer message log — the shape of a WhatsApp send (03-operations/automations.md)
+// without an actual WhatsApp Cloud API integration yet (that's a later deployment-guide
+// phase requiring real Meta Business credentials). status stays 'queued' until that phase
+// wires up a real channel; this table is the audit trail proving each automation fired
+// correctly, decision logic included, well before the transport exists.
+const customerMessages = pgTable('customer_messages', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  customer: uuid('customer_id')
+    .notNull()
+    .references(() => customers._id, { onDelete: 'cascade' }),
+  washOrder: uuid('wash_order_id').references(() => washOrders._id, { onDelete: 'set null' }),
+  channel: text('channel').notNull().default('whatsapp'),
+  template: text('template').notNull(),
+  automation: text('automation').notNull(),
+  status: text('status').notNull().default('queued'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -220,4 +241,5 @@ module.exports = {
   packagePricing,
   serviceBays,
   washOrders,
+  customerMessages,
 };

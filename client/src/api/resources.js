@@ -50,6 +50,7 @@ export const washOrdersApi = {
   qualityCheck: (id, result) => apiClient.patch(`/wash-orders/${id}/qc`, { result }).then((r) => r.data),
   checkout: (id, paymentMethod) => apiClient.patch(`/wash-orders/${id}/checkout`, { paymentMethod }).then((r) => r.data),
   cancel: (id) => apiClient.patch(`/wash-orders/${id}/cancel`).then((r) => r.data),
+  checkoutStats: () => apiClient.get('/wash-orders/checkout-stats').then((r) => r.data),
 }
 
 export const dashboardApi = {
