@@ -17,7 +17,20 @@ const {
   membershipSubscriptions,
   tickets,
   ticketComments,
+  ledgerAccounts,
+  employees,
+  shifts,
+  leaveRequests,
+  suppliers,
+  supplies,
+  packageSupplyUsage,
+  purchaseOrders,
+  purchaseOrderLines,
 } = require('../db/schema');
+const { postWashOrderCheckout, postMembershipCharge, postExpense } = require('../services/ledgerService');
+const { runPayroll } = require('../services/payrollService');
+const { receivePurchaseOrder, closePurchaseOrder, postStockAdjustment } = require('../services/inventoryService');
+const { createPurchaseOrdersFromRecommendations } = require('../agents/inventoryForecasterAgent');
 
 const servicesSeed = [
   { name: 'Express Wash', category: 'basic', price: 15, durationMinutes: 20, description: 'Quick exterior rinse & dry' },
@@ -38,8 +51,37 @@ const run = async () => {
   console.log('Seeding database...');
 
   await pool.query(
-    'TRUNCATE ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
+    'TRUNCATE stock_adjustments, purchase_order_lines, purchase_orders, package_supply_usage, supplies, suppliers, payroll_lines, payroll_runs, leave_requests, shifts, employees, journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
   );
+
+  // --- Chart of accounts (05-finance/accounting.md) — seeded once, up front, since every
+  // journal_lines.account_code below (and every real posting from the app itself) requires
+  // the account to already exist (a foreign key, not a free-text field).
+  const chartOfAccounts = [
+    { code: '1000', name: 'Cash', type: 'asset' },
+    { code: '1100', name: 'Accounts Receivable - Fleet', type: 'asset' },
+    { code: '1400', name: 'Chemical & Supply Inventory', type: 'asset' },
+    { code: '1500', name: 'Wash Equipment (net of depreciation)', type: 'asset' },
+    { code: '2000', name: 'Supplier Payables', type: 'liability' },
+    { code: '2100', name: 'Sales Tax Payable', type: 'liability' },
+    { code: '2200', name: 'Loyalty Points Payable', type: 'liability' },
+    { code: '2300', name: 'Deferred Membership Revenue', type: 'liability' },
+    { code: '2400', name: 'Equipment Financing Payable', type: 'liability' },
+    { code: '3000', name: "Owner's Equity", type: 'equity' },
+    { code: '4000', name: 'Pay-Per-Wash Revenue', type: 'revenue' },
+    { code: '4100', name: 'Membership Revenue', type: 'revenue' },
+    { code: '4200', name: 'Fleet/Commercial Revenue', type: 'revenue' },
+    { code: '5000', name: 'Payroll Expense', type: 'expense' },
+    { code: '5100', name: 'Chemical & Supply Expense', type: 'expense' },
+    { code: '5200', name: 'Water & Utilities Expense', type: 'expense' },
+    { code: '5300', name: 'Equipment Maintenance Expense', type: 'expense' },
+    { code: '5400', name: 'Payment Processing Fees', type: 'expense' },
+    { code: '5500', name: 'Marketing Expense', type: 'expense' },
+    { code: '5600', name: 'Loyalty Program Expense', type: 'expense' },
+    { code: '5700', name: 'Inventory Shrinkage Expense', type: 'expense' },
+    { code: '5800', name: 'Rent Expense', type: 'expense' },
+  ];
+  await db.insert(ledgerAccounts).values(chartOfAccounts);
 
   const insertedUsers = await db
     .insert(users)
@@ -164,7 +206,8 @@ const run = async () => {
       createdBy: admin._id,
     });
   }
-  await db.insert(expenses).values(expenseRows);
+  const createdExpenses = await db.insert(expenses).values(expenseRows).returning();
+  for (const exp of createdExpenses) await postExpense(exp);
 
   // --- SplashPoint wash-floor module (Phase 1 demo data) ---
   const packageSeed = [
@@ -236,8 +279,19 @@ const run = async () => {
     wo(8, { packageIdx: 0, package: createdPackages[0]._id, status: 'completed', queuePosition: 8, queuedAt: woDate(7, 40), bayAssignedAt: woDate(7, 42), washStartedAt: woDate(7, 44), washCompletedAt: woDate(7, 52), checkedOutAt: woDate(7, 55), qcResult: 'pass', paymentMethod: 'card' }),
     wo(9, { packageIdx: 1, package: createdPackages[1]._id, status: 'completed', queuePosition: 9, queuedAt: woDate(7, 10), bayAssignedAt: woDate(7, 12), washStartedAt: woDate(7, 14), washCompletedAt: woDate(7, 24), checkedOutAt: woDate(7, 27), qcResult: 'pass', paymentMethod: 'membership' }),
     wo(10, { packageIdx: 0, package: createdPackages[0]._id, status: 'cancelled', queuePosition: 10, queuedAt: woDate(7, 0) }),
+    // Detail-bay, completed, assigned to a detail-technician (Sara Staff — see HR seed data
+    // below) so payroll's commission calc has something to compute in the demo.
+    wo(11, {
+      packageIdx: 3, package: createdPackages[3]._id, status: 'completed', queuePosition: 11,
+      queuedAt: woDate(6, 0), bayAssignedAt: woDate(6, 2), washStartedAt: woDate(6, 5),
+      washCompletedAt: woDate(7, 30), checkedOutAt: woDate(7, 35), qcResult: 'pass',
+      paymentMethod: 'card', assignedTechnician: staffMembers[1]._id,
+    }),
   ];
-  await db.insert(washOrders).values(washOrderSeed.map(({ packageIdx, ...row }) => row));
+  const createdWashOrders = await db.insert(washOrders).values(washOrderSeed.map(({ packageIdx, ...row }) => row)).returning();
+  for (const order of createdWashOrders) {
+    if (order.status === 'completed') await postWashOrderCheckout(order);
+  }
 
   // --- Membership billing (Phase 5 demo data) ---
   // No STRIPE_SECRET_KEY at seed time, so these have no stripePriceId — createPlan/updatePlan
@@ -250,15 +304,143 @@ const run = async () => {
   const createdPlans = await db.insert(membershipPlans).values(membershipPlanSeed).returning();
 
   const memberVehicle = createdVehicles[1];
+  const [createdSubscription] = await db
+    .insert(membershipSubscriptions)
+    .values({
+      customer: memberVehicle.customer,
+      vehicle: memberVehicle._id,
+      plan: createdPlans[0]._id,
+      billingDayOfMonth: now.getDate(),
+      nextBillingDate: new Date(now.getFullYear(), now.getMonth() + 1, now.getDate()),
+      washesThisCycle: 2,
+      status: 'active',
+    })
+    .returning();
+  await postMembershipCharge(createdSubscription, membershipPlanSeed[0].monthlyPrice, 'Basic Unlimited membership charge');
+
+  // A second member, already 2 days into a payment failure — demonstrates
+  // membershipBillingAgent.js's lifecycle in the /memberships UI without needing a real
+  // Stripe webhook to get there.
+  const pastDueVehicle = createdVehicles[2];
   await db.insert(membershipSubscriptions).values({
-    customer: memberVehicle.customer,
-    vehicle: memberVehicle._id,
-    plan: createdPlans[0]._id,
+    customer: pastDueVehicle.customer,
+    vehicle: pastDueVehicle._id,
+    plan: createdPlans[1]._id,
     billingDayOfMonth: now.getDate(),
-    nextBillingDate: new Date(now.getFullYear(), now.getMonth() + 1, now.getDate()),
-    washesThisCycle: 2,
-    status: 'active',
+    nextBillingDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2),
+    failedPaymentAttempts: 1,
+    firstFailedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+    status: 'past-due',
   });
+
+  // --- HR & payroll (03-operations/hr.md demo data) ---
+  const employeeSeed = [
+    { user: staffMembers[0]._id, name: staffMembers[0].name, phone: staffMembers[0].phone, position: 'bay-attendant', status: 'active', hireDate: new Date(now.getFullYear() - 1, 2, 10), hourlyRate: 16 },
+    { user: staffMembers[1]._id, name: staffMembers[1].name, phone: staffMembers[1].phone, position: 'detail-technician', status: 'active', hireDate: new Date(now.getFullYear() - 1, 5, 1), hourlyRate: 18, commissionRate: 0.1 },
+    { user: staffMembers[2]._id, name: staffMembers[2].name, phone: staffMembers[2].phone, position: 'cashier', status: 'active', hireDate: new Date(now.getFullYear(), 0, 15), hourlyRate: 15 },
+    { user: insertedUsers[1]._id, name: insertedUsers[1].name, phone: insertedUsers[1].phone, position: 'site-manager', status: 'active', hireDate: new Date(now.getFullYear() - 2, 0, 1), annualSalary: 62000 },
+    // An applicant with no login yet — shows the lifecycle's own point that Employee !=
+    // a users/RBAC row.
+    { name: 'Jordan Lee', phone: '555-0900', position: 'wash-technician', status: 'applicant' },
+  ];
+  const createdEmployees = await db.insert(employees).values(employeeSeed).returning();
+  const [bayAttendantEmp, detailTechEmp, cashierEmp] = createdEmployees;
+
+  const shiftDate = (daysAgo, h, m = 0) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo, h, m);
+  const shiftSeed = [
+    // Completed shifts this pay period — feed payroll's hours calc.
+    { employee: bayAttendantEmp._id, startsAt: shiftDate(2, 7), endsAt: shiftDate(2, 15), status: 'completed', checkedInAt: shiftDate(2, 7, 2), checkedOutAt: shiftDate(2, 15) },
+    { employee: bayAttendantEmp._id, startsAt: shiftDate(1, 7), endsAt: shiftDate(1, 15), status: 'completed', checkedInAt: shiftDate(1, 7), checkedOutAt: shiftDate(1, 15) },
+    { employee: detailTechEmp._id, bay: bayByNumber.get(5)._id, startsAt: shiftDate(2, 8), endsAt: shiftDate(2, 16), status: 'completed', checkedInAt: shiftDate(2, 8), checkedOutAt: shiftDate(2, 16) },
+    { employee: cashierEmp._id, startsAt: shiftDate(1, 9), endsAt: shiftDate(1, 17), status: 'completed', checkedInAt: shiftDate(1, 9), checkedOutAt: shiftDate(1, 17) },
+    // Scheduled but never clocked in and well past start — demonstrates the live-computed
+    // "isLate" flag (shift-no-show-alert's signal) without needing a real scheduler.
+    { employee: cashierEmp._id, startsAt: shiftDate(0, 6), endsAt: shiftDate(0, 14), status: 'scheduled' },
+    // Upcoming, not yet due.
+    { employee: bayAttendantEmp._id, startsAt: new Date(now.getTime() + 20 * 60 * 60 * 1000), endsAt: new Date(now.getTime() + 28 * 60 * 60 * 1000), status: 'scheduled' },
+  ];
+  await db.insert(shifts).values(shiftSeed);
+
+  await db.insert(leaveRequests).values([
+    { employee: cashierEmp._id, startDate: new Date(now.getFullYear(), now.getMonth() + 1, 3), endDate: new Date(now.getFullYear(), now.getMonth() + 1, 5), reason: 'Family trip', status: 'approved', approvedBy: admin._id },
+    { employee: bayAttendantEmp._id, startDate: new Date(now.getFullYear(), now.getMonth() + 1, 10), endDate: new Date(now.getFullYear(), now.getMonth() + 1, 10), reason: 'Doctor appointment', status: 'pending' },
+  ]);
+
+  // One payroll run over the last 14 days — auto-posts to the ledger too (payrollLinked),
+  // so /finance and /hr agree on the same numbers out of the box.
+  await runPayroll({
+    periodStart: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000),
+    periodEnd: now,
+    createdBy: admin._id,
+  });
+
+  // --- Inventory & purchasing (03-operations/inventory.md demo data) ---
+  const supplierSeed = [
+    { name: 'Regional Car Wash Chemical Supply Co.', leadTimeDays: 4 },
+    { name: 'Tunnel Equipment Parts Distributor', leadTimeDays: 10 },
+    { name: 'Microfiber & Detailing Supplies Wholesaler', leadTimeDays: 5 },
+  ];
+  const createdSuppliers = await db.insert(suppliers).values(supplierSeed).returning();
+  const [chemSupplier, partsSupplier, towelsSupplier] = createdSuppliers;
+
+  // Deliberately low on-hand for tunnel-soap and interior-cleaner — this seed's wash-floor
+  // demo data only has a handful of *completed* orders (not a realistic week's volume), so
+  // the reorder-point math below works out to small numbers by design, just enough to
+  // demonstrate inventory-forecaster actually flagging something without needing hundreds
+  // of fabricated historical wash orders.
+  const supplySeed = [
+    { name: 'Tunnel Soap Concentrate', warehouse: 'main-chemical-room', unit: 'gallon', quantityOnHand: 0.05, unitCost: 12, supplier: chemSupplier._id },
+    { name: 'Wax Concentrate', warehouse: 'main-chemical-room', unit: 'gallon', quantityOnHand: 40, unitCost: 18, supplier: chemSupplier._id },
+    { name: 'Tire Shine', warehouse: 'main-chemical-room', unit: 'gallon', quantityOnHand: 30, unitCost: 15, supplier: chemSupplier._id },
+    { name: 'Reclaim Filter Media', warehouse: 'main-chemical-room', unit: 'case', quantityOnHand: 10, unitCost: 45, supplier: partsSupplier._id },
+    { name: 'Interior Cleaner', warehouse: 'detail-bay-storage', unit: 'gallon', quantityOnHand: 0.1, unitCost: 20, supplier: chemSupplier._id },
+    { name: 'Microfiber Towels', warehouse: 'detail-bay-storage', unit: 'case', quantityOnHand: 8, unitCost: 35, supplier: towelsSupplier._id },
+  ];
+  const createdSupplies = await db.insert(supplies).values(supplySeed).returning();
+  const [soap, wax, tireShine, filterMedia, interiorCleaner, towels] = createdSupplies;
+
+  // "Chemical consumption scales with package mix, not just wash count."
+  await db.insert(packageSupplyUsage).values([
+    { package: createdPackages[0]._id, supply: soap._id, quantityPerWash: 0.1 }, // express-exterior
+    { package: createdPackages[1]._id, supply: soap._id, quantityPerWash: 0.12 }, // exterior-plus
+    { package: createdPackages[1]._id, supply: wax._id, quantityPerWash: 0.05 },
+    { package: createdPackages[1]._id, supply: tireShine._id, quantityPerWash: 0.03 },
+    { package: createdPackages[2]._id, supply: wax._id, quantityPerWash: 0.08 }, // signature-full-service
+    { package: createdPackages[2]._id, supply: interiorCleaner._id, quantityPerWash: 0.15 },
+    { package: createdPackages[2]._id, supply: towels._id, quantityPerWash: 0.02 },
+    { package: createdPackages[3]._id, supply: wax._id, quantityPerWash: 0.1 }, // premium-hand-detail
+    { package: createdPackages[3]._id, supply: interiorCleaner._id, quantityPerWash: 0.25 },
+    { package: createdPackages[3]._id, supply: towels._id, quantityPerWash: 0.05 },
+  ]);
+
+  // A stock write-off — approved by the site-manager Employee record, posts to 5700
+  // Inventory Shrinkage Expense.
+  await postStockAdjustment({
+    supply: tireShine._id,
+    quantityDelta: -2,
+    reasonCode: 'spillage',
+    notes: 'Dropped case during restock',
+    approvedBy: createdEmployees[3]._id, // Maria Manager, site-manager
+    createdBy: admin._id,
+  });
+
+  // A purchase order taken all the way through Sent -> Received -> Closed, so the ledger
+  // (and the /inventory UI) show a complete example, not just a draft.
+  const [filterPO] = await db
+    .insert(purchaseOrders)
+    .values({ supplier: partsSupplier._id, status: 'sent', totalAmount: 5 * filterMedia.unitCost, source: 'manual', createdBy: admin._id, sentAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) })
+    .returning();
+  const [filterPOLine] = await db
+    .insert(purchaseOrderLines)
+    .values({ purchaseOrder: filterPO._id, supply: filterMedia._id, quantityOrdered: 5, unitCost: filterMedia.unitCost })
+    .returning();
+  await receivePurchaseOrder({ purchaseOrderId: filterPO._id, receivedLines: [{ lineId: filterPOLine._id, quantityReceived: 5 }] });
+  await closePurchaseOrder(filterPO._id);
+
+  // inventory-forecaster's own recommendation run — drafts/sends real POs from the
+  // deliberately-low soap/interior-cleaner stock above, exactly as POST /inventory/forecast/run
+  // would.
+  await createPurchaseOrdersFromRecommendations(admin._id);
 
   // --- Support tickets (04-growth/crm.md demo data) ---
   const ticketSeed = [

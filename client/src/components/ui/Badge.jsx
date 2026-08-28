@@ -47,6 +47,27 @@ const statusColor = {
   normal: 'blue',
   high: 'amber',
   urgent: 'red',
+  // employee lifecycle (03-operations/hr.md)
+  applicant: 'slate',
+  hired: 'blue',
+  onboarding: 'cyan',
+  'on-leave': 'amber',
+  offboarded: 'slate',
+  // shift status
+  scheduled: 'blue',
+  'no-show': 'red',
+  // leave request decision
+  approved: 'green',
+  denied: 'red',
+  // membership subscription lifecycle (01-foundation/data-model.md)
+  'past-due': 'amber',
+  suspended: 'red',
+  paused: 'cyan',
+  // purchase order lifecycle (03-operations/inventory.md)
+  draft: 'slate',
+  sent: 'blue',
+  'partially-received': 'amber',
+  received: 'cyan',
 }
 
 const Badge = ({ children, color, status, className = '' }) => {

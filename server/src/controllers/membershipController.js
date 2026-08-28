@@ -226,6 +226,21 @@ const resumeSubscription = asyncHandler(async (req, res) => {
   res.json(updated);
 });
 
+// "active (paid manually)" — the state machine's own third way out of past-due/suspended,
+// for a customer who pays at the counter (cash/card) instead of Stripe successfully
+// retrying. Doesn't touch Stripe at all — if a real subscription is attached, whatever
+// happens there next (another retry, its own dunning) is independent of this app's own
+// record now reading active again.
+const markPaidManually = asyncHandler(async (req, res) => {
+  const sub = await requireSubStatus(res, req.params.id, ['past-due', 'suspended']);
+  const [updated] = await db
+    .update(membershipSubscriptions)
+    .set({ status: 'active', failedPaymentAttempts: 0, firstFailedAt: null, updatedAt: new Date() })
+    .where(eq(membershipSubscriptions._id, sub._id))
+    .returning();
+  res.json(updated);
+});
+
 // "Cancellation itself is allowed autonomously" per the spec's WhatsApp conversational-flow
 // table — no approval gate here for a customer- or staff-initiated cancel.
 const cancelSubscription = asyncHandler(async (req, res) => {
@@ -257,5 +272,6 @@ module.exports = {
   createSubscription,
   pauseSubscription,
   resumeSubscription,
+  markPaidManually,
   cancelSubscription,
 };

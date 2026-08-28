@@ -48,6 +48,7 @@ export const membershipSubscriptionsApi = {
   create: (data) => apiClient.post('/membership-subscriptions', data).then((r) => r.data),
   pause: (id, pausedUntil) => apiClient.patch(`/membership-subscriptions/${id}/pause`, { pausedUntil }).then((r) => r.data),
   resume: (id) => apiClient.patch(`/membership-subscriptions/${id}/resume`).then((r) => r.data),
+  markPaid: (id) => apiClient.patch(`/membership-subscriptions/${id}/mark-paid`).then((r) => r.data),
   cancel: (id) => apiClient.patch(`/membership-subscriptions/${id}/cancel`).then((r) => r.data),
 }
 
@@ -58,6 +59,65 @@ export const integrationsApi = {
 export const conciergeApi = {
   conversations: () => apiClient.get('/concierge/conversations').then((r) => r.data),
   simulate: (fromPhone, text) => apiClient.post('/concierge/simulate', { fromPhone, text }).then((r) => r.data),
+}
+
+export const ledgerApi = {
+  accounts: () => apiClient.get('/ledger/accounts').then((r) => r.data),
+  entries: (params) => apiClient.get('/ledger/entries', { params }).then((r) => r.data),
+  pnl: (params) => apiClient.get('/ledger/pnl', { params }).then((r) => r.data),
+}
+
+export const hrApi = {
+  employees: {
+    list: () => apiClient.get('/hr/employees').then((r) => r.data),
+    get: (id) => apiClient.get(`/hr/employees/${id}`).then((r) => r.data),
+    create: (data) => apiClient.post('/hr/employees', data).then((r) => r.data),
+    update: (id, data) => apiClient.put(`/hr/employees/${id}`, data).then((r) => r.data),
+    remove: (id) => apiClient.delete(`/hr/employees/${id}`).then((r) => r.data),
+  },
+  shifts: {
+    list: (params) => apiClient.get('/hr/shifts', { params }).then((r) => r.data),
+    create: (data) => apiClient.post('/hr/shifts', data).then((r) => r.data),
+    update: (id, data) => apiClient.put(`/hr/shifts/${id}`, data).then((r) => r.data),
+    remove: (id) => apiClient.delete(`/hr/shifts/${id}`).then((r) => r.data),
+    clockIn: (id) => apiClient.patch(`/hr/shifts/${id}/clock-in`).then((r) => r.data),
+    clockOut: (id) => apiClient.patch(`/hr/shifts/${id}/clock-out`).then((r) => r.data),
+  },
+  leaveRequests: {
+    list: (params) => apiClient.get('/hr/leave-requests', { params }).then((r) => r.data),
+    create: (data) => apiClient.post('/hr/leave-requests', data).then((r) => r.data),
+    decide: (id, status) => apiClient.patch(`/hr/leave-requests/${id}/decision`, { status }).then((r) => r.data),
+  },
+  payrollRuns: {
+    list: () => apiClient.get('/hr/payroll-runs').then((r) => r.data),
+    get: (id) => apiClient.get(`/hr/payroll-runs/${id}`).then((r) => r.data),
+    create: (data) => apiClient.post('/hr/payroll-runs', data).then((r) => r.data),
+  },
+}
+
+export const inventoryApi = {
+  supplies: {
+    list: () => apiClient.get('/inventory/supplies').then((r) => r.data),
+    create: (data) => apiClient.post('/inventory/supplies', data).then((r) => r.data),
+    update: (id, data) => apiClient.put(`/inventory/supplies/${id}`, data).then((r) => r.data),
+    remove: (id) => apiClient.delete(`/inventory/supplies/${id}`).then((r) => r.data),
+  },
+  adjustments: {
+    list: () => apiClient.get('/inventory/adjustments').then((r) => r.data),
+    create: (data) => apiClient.post('/inventory/adjustments', data).then((r) => r.data),
+  },
+  purchaseOrders: {
+    list: () => apiClient.get('/inventory/purchase-orders').then((r) => r.data),
+    get: (id) => apiClient.get(`/inventory/purchase-orders/${id}`).then((r) => r.data),
+    create: (data) => apiClient.post('/inventory/purchase-orders', data).then((r) => r.data),
+    approve: (id) => apiClient.patch(`/inventory/purchase-orders/${id}/approve`).then((r) => r.data),
+    receive: (id, receivedLines) => apiClient.patch(`/inventory/purchase-orders/${id}/receive`, { receivedLines }).then((r) => r.data),
+    close: (id) => apiClient.patch(`/inventory/purchase-orders/${id}/close`).then((r) => r.data),
+  },
+  forecast: {
+    preview: () => apiClient.get('/inventory/forecast').then((r) => r.data),
+    run: () => apiClient.post('/inventory/forecast/run').then((r) => r.data),
+  },
 }
 
 export const ticketsApi = {

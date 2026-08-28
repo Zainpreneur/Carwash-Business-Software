@@ -16,7 +16,10 @@ import Customers from './pages/Customers'
 import Vehicles from './pages/Vehicles'
 import Services from './pages/Services'
 import Staff from './pages/Staff'
+import HR from './pages/HR'
+import Inventory from './pages/Inventory'
 import Expenses from './pages/Expenses'
+import Finance from './pages/Finance'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
@@ -48,7 +51,10 @@ function App() {
               <Route path="/memberships" element={<MembershipPlans />} />
               <Route path="/concierge" element={<Concierge />} />
               <Route path="/staff" element={<Staff />} />
+              <Route path="/hr" element={<HR />} />
+              <Route path="/inventory" element={<Inventory />} />
               <Route path="/expenses" element={<Expenses />} />
+              <Route path="/finance" element={<Finance />} />
               <Route path="/reports" element={<Reports />} />
             </Route>
           </Route>

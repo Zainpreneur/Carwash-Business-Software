@@ -8,6 +8,7 @@ const { db } = require('../config/db');
 const { membershipPlans, membershipSubscriptions, customers } = require('../db/schema');
 const { getStripe, isStripeConfigured } = require('../config/stripe');
 const { sendMembershipWelcome } = require('../utils/automations');
+const { postMembershipCharge } = require('./ledgerService');
 
 const ACTIVE_SUB_STATUSES = ['active', 'past-due', 'suspended', 'paused'];
 
@@ -94,6 +95,13 @@ const createSubscription = async ({ customerId, vehicleId, planId, successUrl, c
     .returning();
 
   sendMembershipWelcome(created).catch(() => {});
+  // Demo mode simulates a successful first charge (the subscription is created 'active'
+  // with no real Stripe payment) — the ledger posts the same as if it had been real, same
+  // "demo mode" posture as the rest of this feature: it behaves like the real thing, it just
+  // isn't backed by a real charge.
+  postMembershipCharge(created, plan.monthlyPrice, `${plan.name} membership signup (demo mode)`).catch((err) =>
+    console.error('[ledger] membership signup post failed:', err.message)
+  );
 
   return { mode: 'local', subscription: created };
 };

@@ -281,6 +281,12 @@ const membershipSubscriptions = pgTable('membership_subscriptions', {
   pausedUntil: timestamp('paused_until', { withTimezone: true }),
   washesThisCycle: integer('washes_this_cycle').notNull().default(0),
   failedPaymentAttempts: integer('failed_payment_attempts').notNull().default(0),
+  // Set the moment a subscription first goes past-due; cleared on any return to active.
+  // membershipBillingAgent.js reads this to evaluate the "7 days unresolved" / "30 days
+  // unresolved" clauses of the state machine above — this app has no scheduler to walk the
+  // calendar and check every subscription proactively, so the clock only advances on each
+  // new payment-failed event the real Stripe account sends, not silently in the background.
+  firstFailedAt: timestamp('first_failed_at', { withTimezone: true }),
   status: text('status').notNull().default('active'),
   stripeSubscriptionId: text('stripe_subscription_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -353,6 +359,262 @@ const ticketComments = pgTable('ticket_comments', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// --- Finance & accounting ledger (carwash-compile/05-finance/accounting.md). "A native
+// ledger, sized for a single-location business (21 accounts) but real double-entry
+// throughout - every dollar in the P&L traces to a JournalEntry referencing the WashOrder,
+// MembershipSubscription, or [Expense] that generated it." Scoped to the spec's own
+// auto-posting triggers that this app actually has a workflow for: WashOrder checkout and a
+// successful membership charge, plus this app's pre-existing Expense entity (not in the
+// spec, but the natural expense side of the same ledger). Payroll (below) also posts here
+// now. So does receiving a PurchaseOrder and posting a stock write-off (inventoryService.js,
+// below). Not built: refunds (this app's cancel-wash-order flow only allows cancelling
+// before payment is ever collected, so there is no charge to reverse).
+//
+// Accounts are keyed by the spec's own numeric code (a stable natural key, not a surrogate
+// uuid) since the chart of accounts is a small, seeded, effectively-static reference table.
+const ledgerAccounts = pgTable('ledger_accounts', {
+  code: text('code').primaryKey(),
+  name: text('name').notNull(),
+  // type: asset | liability | equity | revenue | expense
+  type: text('type').notNull(),
+  active: boolean('active').notNull().default(true),
+});
+
+// One JournalEntry per real-world transaction; its JournalLines must balance (sum(debit) ===
+// sum(credit)) — enforced in ledgerService.postEntry, the only way entries get created.
+// sourceEntity/sourceId link back to whatever business event generated it (the spec's own
+// "every JournalEntry carries sourceEntity/sourceId back to the transaction that created
+// it"), but isn't a DB foreign key — the three source tables don't share a namespace.
+const journalEntries = pgTable('journal_entries', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  memo: text('memo').notNull(),
+  // sourceEntity: wash_order | membership_subscription | expense | payroll_run |
+  // purchase_order | stock_adjustment
+  sourceEntity: text('source_entity').notNull(),
+  sourceId: uuid('source_id'),
+  postedAt: timestamp('posted_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+const journalLines = pgTable('journal_lines', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  entry: uuid('entry_id')
+    .notNull()
+    .references(() => journalEntries._id, { onDelete: 'cascade' }),
+  account: text('account_code')
+    .notNull()
+    .references(() => ledgerAccounts.code, { onDelete: 'restrict' }),
+  debit: doublePrecision('debit').notNull().default(0),
+  credit: doublePrecision('credit').notNull().default(0),
+});
+
+// --- HR & payroll (carwash-compile/03-operations/hr.md). "A real staff roster for a 6-bay
+// site: bay-attendants, wash-technicians, detail-technicians, cashiers, a site-manager, and
+// a part-time fleet-account-manager." Employee is explicitly distinct from the login/RBAC
+// `role` on `users` (see the spec's own note); `employees.user` links the two but is
+// nullable — an Employee record can exist (e.g. an Applicant not yet given a login) without
+// a `users` row, and vice versa (an admin login with no HR record).
+const employees = pgTable('employees', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  user: uuid('user_id').references(() => users._id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  phone: text('phone'),
+  email: text('email'),
+  // position: bay-attendant | wash-technician | detail-technician | cashier | site-manager |
+  // fleet-account-manager — the spec's own compensation table keys off this.
+  position: text('position').notNull(),
+  // status: applicant | hired | onboarding | active | on-leave | offboarded (the spec's
+  // own Employee lifecycle).
+  status: text('status').notNull().default('active'),
+  hireDate: timestamp('hire_date', { withTimezone: true }),
+  // Exactly one of hourlyRate/annualSalary is set, matching the spec's compensation table:
+  // bay-attendant/wash-technician/cashier/fleet-account-manager are hourly, site-manager is
+  // salaried. commissionRate is detail-technician only (10% of PackagePricing.price on
+  // completed detail-bay WashOrders, per the spec's own commission basis).
+  hourlyRate: doublePrecision('hourly_rate'),
+  annualSalary: doublePrecision('annual_salary'),
+  commissionRate: doublePrecision('commission_rate'),
+  emergencyContactName: text('emergency_contact_name'),
+  emergencyContactPhone: text('emergency_contact_phone'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// schedulingEntity: Shift (employeeId x time window x optional bayId), per the spec.
+// checkedInAt/checkedOutAt are this app's own addition — the spec's shift-no-show-alert
+// automation needs *something* to detect a no-show against, and this app has no clock-in
+// hardware/kiosk, so a staff member (or the employee via a future self-service view, not
+// built) marks it here instead.
+const shifts = pgTable('shifts', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  employee: uuid('employee_id')
+    .notNull()
+    .references(() => employees._id, { onDelete: 'cascade' }),
+  bay: uuid('bay_id').references(() => serviceBays._id, { onDelete: 'set null' }),
+  startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+  endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+  // status: scheduled | completed | no-show | cancelled
+  status: text('status').notNull().default('scheduled'),
+  checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
+  checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Leave management: "request -> site-manager approval -> calendar block ... so Shift
+// scheduling automatically respects it". The google-calendar half of that isn't built (no
+// such integration exists in this app); instead shiftController blocks creating a new Shift
+// that overlaps an *approved* leave request directly against this table — same end result
+// for this app's own UI, without a real calendar. The spec's 10-PTO-days/year monthly
+// accrual math isn't computed here either (documented, not silently assumed) — this is a
+// request/approve workflow only.
+const leaveRequests = pgTable('leave_requests', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  employee: uuid('employee_id')
+    .notNull()
+    .references(() => employees._id, { onDelete: 'cascade' }),
+  startDate: timestamp('start_date', { withTimezone: true }).notNull(),
+  endDate: timestamp('end_date', { withTimezone: true }).notNull(),
+  reason: text('reason'),
+  // status: pending | approved | denied
+  status: text('status').notNull().default('pending'),
+  approvedBy: uuid('approved_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Payroll (05-finance/accounting.md's payrollLinked: true / this file's own pipeline:
+// "sum Shift hours + detail-technician commission ... -> post to 5000 Payroll Expense ->
+// disburse via Stripe -> generate pay-stub documents"). A PayrollRun is computed and posted
+// to the ledger in one shot (payrollService.js) — no draft/review step, and immutable once
+// created, the same posture as a JournalEntry. Not built: real Stripe disbursement (this
+// only posts the accounting entry, it never moves real money) and pay-stub document
+// generation (needs 06-platform/knowledge-base.md's document store, not built).
+const payrollRuns = pgTable('payroll_runs', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+  periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+  totalAmount: doublePrecision('total_amount').notNull().default(0),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+const payrollLines = pgTable('payroll_lines', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  payrollRun: uuid('payroll_run_id')
+    .notNull()
+    .references(() => payrollRuns._id, { onDelete: 'cascade' }),
+  employee: uuid('employee_id')
+    .notNull()
+    .references(() => employees._id, { onDelete: 'restrict' }),
+  hoursWorked: doublePrecision('hours_worked').notNull().default(0),
+  hourlyRate: doublePrecision('hourly_rate'),
+  wageAmount: doublePrecision('wage_amount').notNull().default(0),
+  commissionAmount: doublePrecision('commission_amount').notNull().default(0),
+  totalAmount: doublePrecision('total_amount').notNull().default(0),
+});
+
+// --- Inventory & supply chain (carwash-compile/03-operations/inventory.md). "Chemicals,
+// tunnel/detail supplies, and disposables - not durable equipment" (that's assets-iot.md's
+// domain, not built). Supply and Stock are the spec's own two entities, but this app
+// consolidates them into one table: "sku-quantity" tracking with no batch/lot numbers and a
+// single location with `stockTransfers: false` means a separate Stock row per Supply item
+// buys nothing here that a quantityOnHand column doesn't already give — a documented
+// simplification, not a missing feature.
+const suppliers = pgTable('suppliers', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  leadTimeDays: integer('lead_time_days').notNull(),
+});
+
+const supplies = pgTable('supplies', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  // warehouse: main-chemical-room | detail-bay-storage — kept separate per the spec's own
+  // reasoning ("a detail-bay stockout doesn't get masked by chemical-room supply").
+  warehouse: text('warehouse').notNull().default('main-chemical-room'),
+  unit: text('unit').notNull().default('unit'), // e.g. gallon, case, roll
+  quantityOnHand: doublePrecision('quantity_on_hand').notNull().default(0),
+  unitCost: doublePrecision('unit_cost').notNull().default(0),
+  supplier: uuid('supplier_id').references(() => suppliers._id, { onDelete: 'set null' }),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// "Chemical consumption scales with package mix, not just wash count" — how much of a given
+// Supply one wash of a given WashPackage consumes. inventory-forecaster reads trailing
+// WashOrder volume grouped by package against this table rather than a single flat
+// per-vehicle average.
+const packageSupplyUsage = pgTable('package_supply_usage', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  package: uuid('package_id')
+    .notNull()
+    .references(() => washPackages._id, { onDelete: 'cascade' }),
+  supply: uuid('supply_id')
+    .notNull()
+    .references(() => supplies._id, { onDelete: 'cascade' }),
+  quantityPerWash: doublePrecision('quantity_per_wash').notNull(),
+});
+
+// State machine: Draft -> Sent -> PartiallyReceived -> Received -> Closed. inventory-
+// forecaster's own recommendations create these directly (auto-sent under $150, Draft
+// above it pending site-manager approval); receiving updates Stock and posts the A/P
+// journal entry (server/src/services/inventoryService.js), matching accounting.payrollLinked's
+// same "share one source of truth" principle.
+const purchaseOrders = pgTable('purchase_orders', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  supplier: uuid('supplier_id')
+    .notNull()
+    .references(() => suppliers._id, { onDelete: 'restrict' }),
+  status: text('status').notNull().default('draft'),
+  totalAmount: doublePrecision('total_amount').notNull().default(0),
+  // source: inventory-forecaster | manual — who drafted it, for the /inventory UI to show
+  // "auto-recommended" vs. staff-created purchase orders distinctly.
+  source: text('source').notNull().default('manual'),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  approvedBy: uuid('approved_by_id').references(() => users._id, { onDelete: 'set null' }),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  receivedAt: timestamp('received_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+const purchaseOrderLines = pgTable('purchase_order_lines', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  purchaseOrder: uuid('purchase_order_id')
+    .notNull()
+    .references(() => purchaseOrders._id, { onDelete: 'cascade' }),
+  supply: uuid('supply_id')
+    .notNull()
+    .references(() => supplies._id, { onDelete: 'restrict' }),
+  quantityOrdered: doublePrecision('quantity_ordered').notNull(),
+  quantityReceived: doublePrecision('quantity_received').notNull().default(0),
+  unitCost: doublePrecision('unit_cost').notNull(),
+});
+
+// StockAdjustment (shrinkage & write-offs) — "always requiring approvedBy ... same approval
+// discipline as a discount/refund". approvedBy references an Employee (not a bare users
+// row) since the spec explicitly calls out this is an HR-tracked accountability, not just
+// whoever's logged in.
+const stockAdjustments = pgTable('stock_adjustments', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  supply: uuid('supply_id')
+    .notNull()
+    .references(() => supplies._id, { onDelete: 'cascade' }),
+  // quantityDelta: negative for a loss (breakage/spillage/theft/expired), positive for a
+  // count-correction that found more stock than the system expected.
+  quantityDelta: doublePrecision('quantity_delta').notNull(),
+  // reasonCode: breakage | spillage | theft | expired | count-correction
+  reasonCode: text('reason_code').notNull(),
+  notes: text('notes'),
+  approvedBy: uuid('approved_by_id')
+    .notNull()
+    .references(() => employees._id, { onDelete: 'restrict' }),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -372,4 +634,18 @@ module.exports = {
   agentConversations,
   tickets,
   ticketComments,
+  ledgerAccounts,
+  journalEntries,
+  journalLines,
+  employees,
+  shifts,
+  leaveRequests,
+  payrollRuns,
+  payrollLines,
+  suppliers,
+  supplies,
+  packageSupplyUsage,
+  purchaseOrders,
+  purchaseOrderLines,
+  stockAdjustments,
 };

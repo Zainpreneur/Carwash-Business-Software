@@ -6,7 +6,9 @@ const { eq } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { membershipSubscriptions } = require('../db/schema');
 const { getStripe, isStripeConfigured, isWebhookConfigured } = require('../config/stripe');
-const { membershipPaymentFailedDunning, sendMembershipWelcome } = require('../utils/automations');
+const { membershipPaymentFailedDunning, membershipSuspended, membershipCancelledForNonPayment, sendMembershipWelcome } = require('../utils/automations');
+const { postMembershipCharge } = require('../services/ledgerService');
+const { evaluateFailedPayment, evaluateSucceededPayment } = require('../agents/membershipBillingAgent');
 
 const nextMonth = (from = new Date()) => {
   const d = new Date(from);
@@ -35,21 +37,37 @@ const handleCheckoutCompleted = async (session) => {
   await sendMembershipWelcome(created);
 };
 
+// billing-charge-failed transitions from Active, or advances the clock on an already-
+// delinquent subscription (Stripe keeps retrying the same invoice, or a later cycle's
+// invoice fails too) — membership-billing-agent.js's evaluateFailedPayment decides where it
+// lands (past-due / suspended / cancelled) per the state machine documented on
+// membershipSubscriptions in db/schema.js. Paused/cancelled subscriptions aren't touched —
+// this is the non-payment path, not a status Stripe should be able to override.
 const handlePaymentFailed = async (invoice) => {
   if (!invoice.subscription) return;
   const [sub] = await db
     .select()
     .from(membershipSubscriptions)
     .where(eq(membershipSubscriptions.stripeSubscriptionId, invoice.subscription));
-  if (!sub || sub.status !== 'active') return; // billing-charge-failed only transitions from Active
+  if (!sub || !['active', 'past-due', 'suspended'].includes(sub.status)) return;
 
+  const decision = evaluateFailedPayment(sub);
   const [updated] = await db
     .update(membershipSubscriptions)
-    .set({ status: 'past-due', failedPaymentAttempts: sub.failedPaymentAttempts + 1, updatedAt: new Date() })
+    .set({ ...decision, updatedAt: new Date() })
     .where(eq(membershipSubscriptions._id, sub._id))
     .returning();
 
-  await membershipPaymentFailedDunning(updated);
+  if (decision.status === 'cancelled') {
+    if (sub.stripeSubscriptionId && isStripeConfigured()) {
+      await getStripe().subscriptions.cancel(sub.stripeSubscriptionId).catch((err) => console.error('[stripe] cancel-for-nonpayment failed:', err.message));
+    }
+    await membershipCancelledForNonPayment(updated);
+  } else if (decision.status === 'suspended' && sub.status !== 'suspended') {
+    await membershipSuspended(updated); // only notify on the transition *into* suspended, not every retry after
+  } else {
+    await membershipPaymentFailedDunning(updated);
+  }
 };
 
 const handlePaymentSucceeded = async (invoice) => {
@@ -60,16 +78,25 @@ const handlePaymentSucceeded = async (invoice) => {
     .where(eq(membershipSubscriptions.stripeSubscriptionId, invoice.subscription));
   if (!sub) return;
 
+  const decision = ['past-due', 'suspended'].includes(sub.status) ? evaluateSucceededPayment() : { status: sub.status, failedPaymentAttempts: 0, firstFailedAt: null };
   await db
     .update(membershipSubscriptions)
     .set({
-      status: sub.status === 'past-due' ? 'active' : sub.status,
-      failedPaymentAttempts: 0,
+      ...decision,
       washesThisCycle: 0,
       nextBillingDate: nextMonth(),
       updatedAt: new Date(),
     })
     .where(eq(membershipSubscriptions._id, sub._id));
+
+  // Auto-posting rule (05-finance/accounting.md) — posted here rather than on
+  // checkout.session.completed above so a brand-new subscription's first charge is only
+  // posted once: Stripe fires invoice.payment_succeeded for that first invoice too, and this
+  // event carries the actual amount charged (invoice.amount_paid), not just the plan's
+  // sticker price — accurate through proration, coupons, etc.
+  postMembershipCharge(sub, invoice.amount_paid / 100, `Membership charge (invoice ${invoice.id})`).catch((err) =>
+    console.error('[ledger] membership charge post failed:', err.message)
+  );
 };
 
 const handleSubscriptionDeleted = async (stripeSubscription) => {

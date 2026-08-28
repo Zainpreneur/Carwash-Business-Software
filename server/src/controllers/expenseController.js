@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler');
 const { eq, desc, count, and, gte, lte } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { expenses, users } = require('../db/schema');
+const { postExpense, reverseExpense } = require('../services/ledgerService');
 
 const getExpenses = asyncHandler(async (req, res) => {
   const { category, from, to, page = 1, limit = 20 } = req.query;
@@ -38,6 +39,9 @@ const createExpense = asyncHandler(async (req, res) => {
     .insert(expenses)
     .values({ category, description, amount, date: date ? new Date(date) : undefined, createdBy: req.user._id })
     .returning();
+
+  postExpense(expense).catch((err) => console.error('[ledger] expense post failed:', err.message));
+
   res.status(201).json({ ...expense, createdBy: { _id: req.user._id, name: req.user.name } });
 });
 
@@ -64,6 +68,9 @@ const deleteExpense = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Expense not found');
   }
+  // Ledger entries are never mutated once posted — a reversing entry, not a deleted/edited
+  // line (05-finance/accounting.md's own period-close posture).
+  reverseExpense(deleted[0]).catch((err) => console.error('[ledger] expense reversal post failed:', err.message));
   res.json({ message: 'Expense removed' });
 });
 
