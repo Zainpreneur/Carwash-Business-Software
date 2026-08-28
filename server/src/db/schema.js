@@ -366,8 +366,8 @@ const ticketComments = pgTable('ticket_comments', {
 // auto-posting triggers that this app actually has a workflow for: WashOrder checkout and a
 // successful membership charge, plus this app's pre-existing Expense entity (not in the
 // spec, but the natural expense side of the same ledger). Payroll (below) also posts here
-// now. Not built, documented at each call site: PurchaseOrder receiving (needs an inventory
-// module, not built) and refunds (this app's cancel-wash-order flow only allows cancelling
+// now. So does receiving a PurchaseOrder and posting a stock write-off (inventoryService.js,
+// below). Not built: refunds (this app's cancel-wash-order flow only allows cancelling
 // before payment is ever collected, so there is no charge to reverse).
 //
 // Accounts are keyed by the spec's own numeric code (a stable natural key, not a surrogate
@@ -388,7 +388,8 @@ const ledgerAccounts = pgTable('ledger_accounts', {
 const journalEntries = pgTable('journal_entries', {
   _id: uuid('_id').primaryKey().defaultRandom(),
   memo: text('memo').notNull(),
-  // sourceEntity: wash_order | membership_subscription | expense | payroll_run
+  // sourceEntity: wash_order | membership_subscription | expense | payroll_run |
+  // purchase_order | stock_adjustment
   sourceEntity: text('source_entity').notNull(),
   sourceId: uuid('source_id'),
   postedAt: timestamp('posted_at', { withTimezone: true }).notNull().defaultNow(),
@@ -512,6 +513,108 @@ const payrollLines = pgTable('payroll_lines', {
   totalAmount: doublePrecision('total_amount').notNull().default(0),
 });
 
+// --- Inventory & supply chain (carwash-compile/03-operations/inventory.md). "Chemicals,
+// tunnel/detail supplies, and disposables - not durable equipment" (that's assets-iot.md's
+// domain, not built). Supply and Stock are the spec's own two entities, but this app
+// consolidates them into one table: "sku-quantity" tracking with no batch/lot numbers and a
+// single location with `stockTransfers: false` means a separate Stock row per Supply item
+// buys nothing here that a quantityOnHand column doesn't already give — a documented
+// simplification, not a missing feature.
+const suppliers = pgTable('suppliers', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  leadTimeDays: integer('lead_time_days').notNull(),
+});
+
+const supplies = pgTable('supplies', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  // warehouse: main-chemical-room | detail-bay-storage — kept separate per the spec's own
+  // reasoning ("a detail-bay stockout doesn't get masked by chemical-room supply").
+  warehouse: text('warehouse').notNull().default('main-chemical-room'),
+  unit: text('unit').notNull().default('unit'), // e.g. gallon, case, roll
+  quantityOnHand: doublePrecision('quantity_on_hand').notNull().default(0),
+  unitCost: doublePrecision('unit_cost').notNull().default(0),
+  supplier: uuid('supplier_id').references(() => suppliers._id, { onDelete: 'set null' }),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// "Chemical consumption scales with package mix, not just wash count" — how much of a given
+// Supply one wash of a given WashPackage consumes. inventory-forecaster reads trailing
+// WashOrder volume grouped by package against this table rather than a single flat
+// per-vehicle average.
+const packageSupplyUsage = pgTable('package_supply_usage', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  package: uuid('package_id')
+    .notNull()
+    .references(() => washPackages._id, { onDelete: 'cascade' }),
+  supply: uuid('supply_id')
+    .notNull()
+    .references(() => supplies._id, { onDelete: 'cascade' }),
+  quantityPerWash: doublePrecision('quantity_per_wash').notNull(),
+});
+
+// State machine: Draft -> Sent -> PartiallyReceived -> Received -> Closed. inventory-
+// forecaster's own recommendations create these directly (auto-sent under $150, Draft
+// above it pending site-manager approval); receiving updates Stock and posts the A/P
+// journal entry (server/src/services/inventoryService.js), matching accounting.payrollLinked's
+// same "share one source of truth" principle.
+const purchaseOrders = pgTable('purchase_orders', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  supplier: uuid('supplier_id')
+    .notNull()
+    .references(() => suppliers._id, { onDelete: 'restrict' }),
+  status: text('status').notNull().default('draft'),
+  totalAmount: doublePrecision('total_amount').notNull().default(0),
+  // source: inventory-forecaster | manual — who drafted it, for the /inventory UI to show
+  // "auto-recommended" vs. staff-created purchase orders distinctly.
+  source: text('source').notNull().default('manual'),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  approvedBy: uuid('approved_by_id').references(() => users._id, { onDelete: 'set null' }),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  receivedAt: timestamp('received_at', { withTimezone: true }),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+const purchaseOrderLines = pgTable('purchase_order_lines', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  purchaseOrder: uuid('purchase_order_id')
+    .notNull()
+    .references(() => purchaseOrders._id, { onDelete: 'cascade' }),
+  supply: uuid('supply_id')
+    .notNull()
+    .references(() => supplies._id, { onDelete: 'restrict' }),
+  quantityOrdered: doublePrecision('quantity_ordered').notNull(),
+  quantityReceived: doublePrecision('quantity_received').notNull().default(0),
+  unitCost: doublePrecision('unit_cost').notNull(),
+});
+
+// StockAdjustment (shrinkage & write-offs) — "always requiring approvedBy ... same approval
+// discipline as a discount/refund". approvedBy references an Employee (not a bare users
+// row) since the spec explicitly calls out this is an HR-tracked accountability, not just
+// whoever's logged in.
+const stockAdjustments = pgTable('stock_adjustments', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  supply: uuid('supply_id')
+    .notNull()
+    .references(() => supplies._id, { onDelete: 'cascade' }),
+  // quantityDelta: negative for a loss (breakage/spillage/theft/expired), positive for a
+  // count-correction that found more stock than the system expected.
+  quantityDelta: doublePrecision('quantity_delta').notNull(),
+  // reasonCode: breakage | spillage | theft | expired | count-correction
+  reasonCode: text('reason_code').notNull(),
+  notes: text('notes'),
+  approvedBy: uuid('approved_by_id')
+    .notNull()
+    .references(() => employees._id, { onDelete: 'restrict' }),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -539,4 +642,10 @@ module.exports = {
   leaveRequests,
   payrollRuns,
   payrollLines,
+  suppliers,
+  supplies,
+  packageSupplyUsage,
+  purchaseOrders,
+  purchaseOrderLines,
+  stockAdjustments,
 };

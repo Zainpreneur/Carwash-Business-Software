@@ -63,6 +63,11 @@ const statusColor = {
   'past-due': 'amber',
   suspended: 'red',
   paused: 'cyan',
+  // purchase order lifecycle (03-operations/inventory.md)
+  draft: 'slate',
+  sent: 'blue',
+  'partially-received': 'amber',
+  received: 'cyan',
 }
 
 const Badge = ({ children, color, status, className = '' }) => {

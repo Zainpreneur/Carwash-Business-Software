@@ -95,6 +95,31 @@ export const hrApi = {
   },
 }
 
+export const inventoryApi = {
+  supplies: {
+    list: () => apiClient.get('/inventory/supplies').then((r) => r.data),
+    create: (data) => apiClient.post('/inventory/supplies', data).then((r) => r.data),
+    update: (id, data) => apiClient.put(`/inventory/supplies/${id}`, data).then((r) => r.data),
+    remove: (id) => apiClient.delete(`/inventory/supplies/${id}`).then((r) => r.data),
+  },
+  adjustments: {
+    list: () => apiClient.get('/inventory/adjustments').then((r) => r.data),
+    create: (data) => apiClient.post('/inventory/adjustments', data).then((r) => r.data),
+  },
+  purchaseOrders: {
+    list: () => apiClient.get('/inventory/purchase-orders').then((r) => r.data),
+    get: (id) => apiClient.get(`/inventory/purchase-orders/${id}`).then((r) => r.data),
+    create: (data) => apiClient.post('/inventory/purchase-orders', data).then((r) => r.data),
+    approve: (id) => apiClient.patch(`/inventory/purchase-orders/${id}/approve`).then((r) => r.data),
+    receive: (id, receivedLines) => apiClient.patch(`/inventory/purchase-orders/${id}/receive`, { receivedLines }).then((r) => r.data),
+    close: (id) => apiClient.patch(`/inventory/purchase-orders/${id}/close`).then((r) => r.data),
+  },
+  forecast: {
+    preview: () => apiClient.get('/inventory/forecast').then((r) => r.data),
+    run: () => apiClient.post('/inventory/forecast/run').then((r) => r.data),
+  },
+}
+
 export const ticketsApi = {
   list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
   get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),

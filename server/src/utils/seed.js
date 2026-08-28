@@ -21,9 +21,16 @@ const {
   employees,
   shifts,
   leaveRequests,
+  suppliers,
+  supplies,
+  packageSupplyUsage,
+  purchaseOrders,
+  purchaseOrderLines,
 } = require('../db/schema');
 const { postWashOrderCheckout, postMembershipCharge, postExpense } = require('../services/ledgerService');
 const { runPayroll } = require('../services/payrollService');
+const { receivePurchaseOrder, closePurchaseOrder, postStockAdjustment } = require('../services/inventoryService');
+const { createPurchaseOrdersFromRecommendations } = require('../agents/inventoryForecasterAgent');
 
 const servicesSeed = [
   { name: 'Express Wash', category: 'basic', price: 15, durationMinutes: 20, description: 'Quick exterior rinse & dry' },
@@ -44,7 +51,7 @@ const run = async () => {
   console.log('Seeding database...');
 
   await pool.query(
-    'TRUNCATE payroll_lines, payroll_runs, leave_requests, shifts, employees, journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
+    'TRUNCATE stock_adjustments, purchase_order_lines, purchase_orders, package_supply_usage, supplies, suppliers, payroll_lines, payroll_runs, leave_requests, shifts, employees, journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
   );
 
   // --- Chart of accounts (05-finance/accounting.md) — seeded once, up front, since every
@@ -366,6 +373,74 @@ const run = async () => {
     periodEnd: now,
     createdBy: admin._id,
   });
+
+  // --- Inventory & purchasing (03-operations/inventory.md demo data) ---
+  const supplierSeed = [
+    { name: 'Regional Car Wash Chemical Supply Co.', leadTimeDays: 4 },
+    { name: 'Tunnel Equipment Parts Distributor', leadTimeDays: 10 },
+    { name: 'Microfiber & Detailing Supplies Wholesaler', leadTimeDays: 5 },
+  ];
+  const createdSuppliers = await db.insert(suppliers).values(supplierSeed).returning();
+  const [chemSupplier, partsSupplier, towelsSupplier] = createdSuppliers;
+
+  // Deliberately low on-hand for tunnel-soap and interior-cleaner — this seed's wash-floor
+  // demo data only has a handful of *completed* orders (not a realistic week's volume), so
+  // the reorder-point math below works out to small numbers by design, just enough to
+  // demonstrate inventory-forecaster actually flagging something without needing hundreds
+  // of fabricated historical wash orders.
+  const supplySeed = [
+    { name: 'Tunnel Soap Concentrate', warehouse: 'main-chemical-room', unit: 'gallon', quantityOnHand: 0.05, unitCost: 12, supplier: chemSupplier._id },
+    { name: 'Wax Concentrate', warehouse: 'main-chemical-room', unit: 'gallon', quantityOnHand: 40, unitCost: 18, supplier: chemSupplier._id },
+    { name: 'Tire Shine', warehouse: 'main-chemical-room', unit: 'gallon', quantityOnHand: 30, unitCost: 15, supplier: chemSupplier._id },
+    { name: 'Reclaim Filter Media', warehouse: 'main-chemical-room', unit: 'case', quantityOnHand: 10, unitCost: 45, supplier: partsSupplier._id },
+    { name: 'Interior Cleaner', warehouse: 'detail-bay-storage', unit: 'gallon', quantityOnHand: 0.1, unitCost: 20, supplier: chemSupplier._id },
+    { name: 'Microfiber Towels', warehouse: 'detail-bay-storage', unit: 'case', quantityOnHand: 8, unitCost: 35, supplier: towelsSupplier._id },
+  ];
+  const createdSupplies = await db.insert(supplies).values(supplySeed).returning();
+  const [soap, wax, tireShine, filterMedia, interiorCleaner, towels] = createdSupplies;
+
+  // "Chemical consumption scales with package mix, not just wash count."
+  await db.insert(packageSupplyUsage).values([
+    { package: createdPackages[0]._id, supply: soap._id, quantityPerWash: 0.1 }, // express-exterior
+    { package: createdPackages[1]._id, supply: soap._id, quantityPerWash: 0.12 }, // exterior-plus
+    { package: createdPackages[1]._id, supply: wax._id, quantityPerWash: 0.05 },
+    { package: createdPackages[1]._id, supply: tireShine._id, quantityPerWash: 0.03 },
+    { package: createdPackages[2]._id, supply: wax._id, quantityPerWash: 0.08 }, // signature-full-service
+    { package: createdPackages[2]._id, supply: interiorCleaner._id, quantityPerWash: 0.15 },
+    { package: createdPackages[2]._id, supply: towels._id, quantityPerWash: 0.02 },
+    { package: createdPackages[3]._id, supply: wax._id, quantityPerWash: 0.1 }, // premium-hand-detail
+    { package: createdPackages[3]._id, supply: interiorCleaner._id, quantityPerWash: 0.25 },
+    { package: createdPackages[3]._id, supply: towels._id, quantityPerWash: 0.05 },
+  ]);
+
+  // A stock write-off — approved by the site-manager Employee record, posts to 5700
+  // Inventory Shrinkage Expense.
+  await postStockAdjustment({
+    supply: tireShine._id,
+    quantityDelta: -2,
+    reasonCode: 'spillage',
+    notes: 'Dropped case during restock',
+    approvedBy: createdEmployees[3]._id, // Maria Manager, site-manager
+    createdBy: admin._id,
+  });
+
+  // A purchase order taken all the way through Sent -> Received -> Closed, so the ledger
+  // (and the /inventory UI) show a complete example, not just a draft.
+  const [filterPO] = await db
+    .insert(purchaseOrders)
+    .values({ supplier: partsSupplier._id, status: 'sent', totalAmount: 5 * filterMedia.unitCost, source: 'manual', createdBy: admin._id, sentAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) })
+    .returning();
+  const [filterPOLine] = await db
+    .insert(purchaseOrderLines)
+    .values({ purchaseOrder: filterPO._id, supply: filterMedia._id, quantityOrdered: 5, unitCost: filterMedia.unitCost })
+    .returning();
+  await receivePurchaseOrder({ purchaseOrderId: filterPO._id, receivedLines: [{ lineId: filterPOLine._id, quantityReceived: 5 }] });
+  await closePurchaseOrder(filterPO._id);
+
+  // inventory-forecaster's own recommendation run — drafts/sends real POs from the
+  // deliberately-low soap/interior-cleaner stock above, exactly as POST /inventory/forecast/run
+  // would.
+  await createPurchaseOrdersFromRecommendations(admin._id);
 
   // --- Support tickets (04-growth/crm.md demo data) ---
   const ticketSeed = [
