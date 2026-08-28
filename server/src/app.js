@@ -23,6 +23,7 @@ const ticketRoutes = require('./routes/ticketRoutes');
 const ledgerRoutes = require('./routes/ledgerRoutes');
 const hrRoutes = require('./routes/hrRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
+const simulationRoutes = require('./routes/simulationRoutes');
 const { handleStripeWebhook } = require('./controllers/stripeWebhookController');
 const { verifyWebhook, receiveMessage } = require('./controllers/whatsappWebhookController');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
@@ -76,6 +77,7 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/ledger', ledgerRoutes);
 app.use('/api/hr', hrRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/simulations', simulationRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

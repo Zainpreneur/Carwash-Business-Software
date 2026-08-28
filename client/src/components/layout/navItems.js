@@ -17,6 +17,7 @@ import {
   Landmark,
   BriefcaseBusiness,
   Boxes,
+  Telescope,
 } from 'lucide-react'
 
 // Role-based wash-floor views (carwash-compile/01-foundation/dashboards.md):
@@ -41,5 +42,6 @@ export const navItems = [
   { to: '/expenses', label: 'Expenses', icon: Receipt, roles: ['admin', 'manager'] },
   { to: '/finance', label: 'Finance', icon: Landmark, roles: ['admin', 'manager'] },
   { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'manager'] },
+  { to: '/simulations', label: 'Simulations', icon: Telescope, roles: ['admin', 'manager'] },
   { to: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'manager', 'staff'] },
 ]
