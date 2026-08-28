@@ -15,6 +15,7 @@
 // roles — a human still acts on it. No key configured -> the same deterministic message this
 // app used before this phase, not a blocked request.
 const { getAnthropicClient, isAgentsConfigured, AGENT_MODEL } = require('../config/anthropic');
+const { recordAgentEvent } = require('../utils/agentMetrics');
 
 const DETERMINISTIC_FALLBACK =
   'Consider opening self-serve overflow or calling in an extra bay-attendant.';
@@ -28,6 +29,7 @@ Respond with 1-2 plain sentences only, addressed to the site manager, no preambl
 // to the same deterministic message this alert used before agents existed.
 const recommendOverflowAction = async ({ queueLength, predictedWaitMinutes, bayCount, timeOfDay }) => {
   if (!isAgentsConfigured()) {
+    recordAgentEvent('queue-dispatch-agent', 'deterministic-fallback');
     return { text: DETERMINISTIC_FALLBACK, source: 'deterministic-fallback' };
   }
 
@@ -45,9 +47,11 @@ const recommendOverflowAction = async ({ queueLength, predictedWaitMinutes, bayC
       ],
     });
     const text = message.content.find((block) => block.type === 'text')?.text?.trim();
+    recordAgentEvent('queue-dispatch-agent', 'ai-agent');
     return { text: text || DETERMINISTIC_FALLBACK, source: 'ai-agent' };
   } catch (err) {
     console.error('[queue-dispatch-agent] Claude call failed, using deterministic fallback:', err.message);
+    recordAgentEvent('queue-dispatch-agent', 'deterministic-fallback');
     return { text: DETERMINISTIC_FALLBACK, source: 'deterministic-fallback' };
   }
 };

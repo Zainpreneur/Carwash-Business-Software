@@ -22,6 +22,7 @@ import Expenses from './pages/Expenses'
 import Finance from './pages/Finance'
 import Reports from './pages/Reports'
 import Simulations from './pages/Simulations'
+import OpsCenter from './pages/OpsCenter'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
 
@@ -58,6 +59,7 @@ function App() {
               <Route path="/finance" element={<Finance />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/simulations" element={<Simulations />} />
+              <Route path="/ops-center" element={<OpsCenter />} />
             </Route>
           </Route>
         </Route>

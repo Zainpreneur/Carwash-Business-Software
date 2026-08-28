@@ -129,6 +129,13 @@ export const simulationApi = {
   pricingScenario: (data) => apiClient.post('/simulations/pricing-scenario', data).then((r) => r.data),
 }
 
+export const agentOpsApi = {
+  orchestratorSnapshot: () => apiClient.get('/agent-ops/orchestrator-snapshot').then((r) => r.data),
+  askStrategyAdvisor: (question) => apiClient.post('/agent-ops/strategy-advisor/ask', { question }).then((r) => r.data),
+  strategyAdvisorHistory: () => apiClient.get('/agent-ops/strategy-advisor/history').then((r) => r.data),
+  systemHealthReport: () => apiClient.get('/agent-ops/system-health-report').then((r) => r.data),
+}
+
 export const ticketsApi = {
   list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
   get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),

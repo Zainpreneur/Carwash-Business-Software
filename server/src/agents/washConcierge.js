@@ -35,6 +35,7 @@ const { isWhatsAppConfigured, sendWhatsAppText } = require('../utils/whatsapp');
 const { notifyRoles } = require('../utils/notify');
 const membershipService = require('../services/membershipService');
 const { getStripe, isStripeConfigured } = require('../config/stripe');
+const { recordAgentEvent } = require('../utils/agentMetrics');
 
 // escalate_to_human's reason -> Ticket.category (04-growth/crm.md's category list). "other"
 // and "negative-sentiment"/"low-confidence" don't map to a specific SLA-bearing category, so
@@ -278,8 +279,10 @@ const handleInboundMessage = async ({ fromPhone, text }) => {
 
   let replyText;
   let toolCallsLog = [];
+  let source = 'ai-agent';
 
   if (!isAgentsConfigured()) {
+    source = 'deterministic-fallback';
     replyText = await deterministicReply(fromPhone, customer);
   } else {
     try {
@@ -327,9 +330,12 @@ const handleInboundMessage = async ({ fromPhone, text }) => {
       replyText = replyText || "Sorry, I couldn't quite process that — a team member will follow up with you.";
     } catch (err) {
       console.error('[wash-concierge] Claude call failed:', err.message);
+      source = 'deterministic-fallback';
       replyText = await deterministicReply(fromPhone, customer);
     }
   }
+
+  recordAgentEvent('wash-concierge', source, toolCallsLog.some((t) => t.name === 'escalate_to_human'));
 
   await db.insert(agentConversations).values({
     phone: fromPhone,
