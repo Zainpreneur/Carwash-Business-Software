@@ -21,7 +21,8 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "stripe": "^22.6.0"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.10",

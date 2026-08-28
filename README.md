@@ -101,6 +101,10 @@ seed` once the stack is up if you want demo data.
 | `JWT_SECRET`      | Secret used to sign JWTs              |
 | `JWT_EXPIRES_IN`  | Token lifetime (e.g. `7d`)            |
 | `CLIENT_URL`      | Allowed CORS origin                   |
+| `STRIPE_SECRET_KEY` | Optional — enables real membership billing via Stripe Checkout/subscriptions. Omit to run membership signup as a local demo (see below). |
+| `STRIPE_WEBHOOK_SECRET` | Optional — required for `/api/webhooks/stripe` to process events (payment success/failure); the endpoint 501s without it even if `STRIPE_SECRET_KEY` is set. |
+| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` | Optional — enables real WhatsApp Cloud API sends. Omit to log automation decisions to `customer_messages` with `status: not_configured` instead of sending. |
+| `WHATSAPP_API_VERSION` | Optional, defaults to `v21.0`. |
 
 **client/.env**
 
@@ -126,17 +130,24 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Wash packages | `GET/POST /wash-packages`, `GET/PUT/DELETE /wash-packages/:id` (each carries 3-tier pricing) |
 | Service bays | `GET /service-bays`, `POST /service-bays`, `PUT/DELETE /service-bays/:id` |
 | Wash orders  | `GET/POST /wash-orders`, `GET /wash-orders/checkout-stats`, `GET /wash-orders/customer-messages`, `GET/DELETE /wash-orders/:id`, `PATCH /wash-orders/:id/{assign-bay,start-wash,complete-wash,qc,checkout,cancel}` |
+| Membership plans | `GET/POST /membership-plans`, `GET/PUT/DELETE /membership-plans/:id` |
+| Membership subscriptions | `GET/POST /membership-subscriptions`, `PATCH /membership-subscriptions/:id/{pause,resume,cancel}` |
+| Integrations | `GET /integrations/status` — whether Stripe/WhatsApp are configured |
+| Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2 & 4)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4 & 5)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
-8-step build order; **steps 1–4 are built and live** as an additive module alongside the
+8-step build order; **steps 1–5 are built and live** as an additive module alongside the
 existing booking-based app — (1) the data model + primary wash lifecycle, (2) role-based UI,
-(3) RBAC (folded into the Phase 2 work), and (4) the lifecycle's automations. Step 5
-(integrations — Stripe, WhatsApp Cloud API, the wash-sensor platform) needs real third-party
-accounts/credentials this session doesn't have, so it's still ahead — see "Not built yet"
-below.
+(3) RBAC (folded into the Phase 2 work), (4) the lifecycle's automations, and (5) the two
+integrations the primary lifecycle needs, Stripe and WhatsApp Cloud API. Both are
+**credential-gated**: this session has no real Stripe account or Meta Business/WhatsApp
+setup, so each feature runs in a graceful local-demo mode until real keys are added to
+`server/.env` — nothing crashes or silently pretends to work without them. Step 6 (AI
+agents), the wash-sensor/IoT platform, and the rest of the growth/finance/HR clusters are
+still ahead — see "Not built yet" below.
 
 - **Data model**: `WashPackage` (+ 3-tier `PackagePricing`), `ServiceBay`, `WashOrder` — see
   `carwash-compile/01-foundation/data-model.md` for the source spec.
@@ -169,12 +180,32 @@ below.
     `bay-assigned` there is rerouted to another open bay in the same lane, or requeued if
     none is free; orders already mid-wash/QC on it are escalated to admin/manager instead of
     silently moved, since a wash in progress can't be safely relocated.
-- **Not built yet** (later phases per the spec's own build order): Stripe/WhatsApp Cloud
-  API/IoT-sensor integrations (step 5 — needs real third-party credentials), AI agents,
-  `MembershipSubscription` billing, social/marketing/CRM, the accounting ledger, and
-  HR/payroll — and RBAC only covers this app's existing admin/manager/staff roles, not the
-  spec's full 7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
-  Technician/Cashier/Fleet Account Manager), which would need its own `Employee` entity.
+- **Integrations** (`carwash-compile/06-platform/integrations.md`) — Stripe (a direct
+  secret-key integration; the spec lists oauth2/Stripe Connect, which is for a platform
+  onboarding many merchant sub-accounts — this single-location business integrating its own
+  account is the correct simplification) and the WhatsApp Business Cloud API:
+  - **Membership billing** (`carwash-compile/01-foundation/data-model.md`'s `MembershipPlan`
+    + `MembershipSubscription`, the `enroll-membership` workflow) — a "New membership"
+    shortcut on the Checkout screen and a `/memberships` admin page (plan CRUD +
+    subscription pause/resume/cancel). With `STRIPE_SECRET_KEY` set, sign-up redirects to a
+    real hosted Stripe Checkout Session and `POST /api/webhooks/stripe` drives the
+    Active↔PastDue/Cancelled state machine from real `invoice.payment_failed`/
+    `invoice.payment_succeeded`/`customer.subscription.deleted` events (also firing
+    `membership-payment-failed-dunning`). Without it, sign-up creates the subscription
+    locally as `active` with no real charge — clearly labeled "demo mode" in the UI.
+  - **WhatsApp sends** (`server/src/utils/whatsapp.js`) — `notify-ready-for-pickup` and the
+    membership welcome/dunning messages attempt a real template send via the Cloud API when
+    `WHATSAPP_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` are set (still requires the named templates
+    to exist and be Meta-approved on that number); otherwise every attempt is logged to
+    `customer_messages` with `status: not_configured`.
+  - `GET /api/integrations/status` reports live connection state — shown as a banner on
+    `/memberships` — so nothing pretends to be connected when it isn't.
+- **Not built yet** (later phases per the spec's own build order): AI agents (step 6), the
+  wash-sensor/IoT platform, the -3d/-2h reminder jobs (need a scheduler this app doesn't run
+  yet), social/marketing/CRM, the accounting ledger, and HR/payroll — and RBAC only covers
+  this app's existing admin/manager/staff roles, not the spec's full 7-role breakdown
+  (Owner/Site Manager/Bay Attendant/Wash Technician/Detail Technician/Cashier/Fleet Account
+  Manager), which would need its own `Employee` entity.
 
 ## Responsiveness
 

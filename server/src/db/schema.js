@@ -36,6 +36,9 @@ const customers = pgTable('customers', {
   // gates transactional WhatsApp messaging (carwash-compile/01-foundation/data-model.md);
   // used by the notify-ready-for-pickup automation.
   whatsappOptIn: boolean('whatsapp_opt_in').notNull().default(true),
+  // set once a Stripe Customer exists for this customer (membership billing only —
+  // never created for a plain pay-per-wash visit).
+  stripeCustomerId: text('stripe_customer_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -210,11 +213,11 @@ const washOrders = pgTable('wash_orders', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Outbound customer message log — the shape of a WhatsApp send (03-operations/automations.md)
-// without an actual WhatsApp Cloud API integration yet (that's a later deployment-guide
-// phase requiring real Meta Business credentials). status stays 'queued' until that phase
-// wires up a real channel; this table is the audit trail proving each automation fired
-// correctly, decision logic included, well before the transport exists.
+// Outbound customer message log (03-operations/automations.md). Sends for real through the
+// WhatsApp Cloud API when WHATSAPP_TOKEN/WHATSAPP_PHONE_NUMBER_ID are configured (see
+// utils/whatsapp.js) — status records the outcome (sent/failed); stays 'not_configured'
+// otherwise. Either way, this is the audit trail: which automation decided to message a
+// customer, with what template, and what happened.
 const customerMessages = pgTable('customer_messages', {
   _id: uuid('_id').primaryKey().defaultRandom(),
   customer: uuid('customer_id')
@@ -225,7 +228,63 @@ const customerMessages = pgTable('customer_messages', {
   template: text('template').notNull(),
   automation: text('automation').notNull(),
   status: text('status').notNull().default('queued'),
+  error: text('error'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// --- Membership billing (carwash-compile/01-foundation/data-model.md "Membership" +
+// 06-platform/integrations.md Stripe entry). Bills for real through Stripe Checkout +
+// subscriptions when STRIPE_SECRET_KEY is configured (see config/stripe.js); degrades to a
+// locally-tracked "active" subscription with no real billing when it isn't, so the feature
+// is demoable without live keys. The spec lists Stripe's auth as oauth2 (Stripe Connect,
+// for a platform onboarding many merchant sub-accounts) — this is a single-location
+// business integrating its own account directly, so a secret-key integration is the
+// correct simplification, not Connect.
+
+const membershipPlans = pgTable('membership_plans', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  // tier: basic-unlimited | premium-unlimited | fleet-unlimited
+  tier: text('tier').notNull(),
+  name: text('name').notNull(),
+  coveredPackage: uuid('covered_package_id')
+    .notNull()
+    .references(() => washPackages._id, { onDelete: 'restrict' }),
+  monthlyPrice: doublePrecision('monthly_price').notNull(),
+  isUnlimited: boolean('is_unlimited').notNull().default(true),
+  washesPerMonthCap: integer('washes_per_month_cap'),
+  rolloverAllowed: boolean('rollover_allowed').notNull().default(false),
+  // set once this plan has been synced to Stripe as a Product+Price (see membershipController).
+  stripePriceId: text('stripe_price_id'),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// State machine (terminal: cancelled): active -> past-due (billing-charge-failed) ->
+// suspended (7 days unresolved) -> cancelled (30 days unresolved) | active (paid manually);
+// active <-> paused (customer-requested); active -> cancelled (customer-cancelled).
+const membershipSubscriptions = pgTable('membership_subscriptions', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  customer: uuid('customer_id')
+    .notNull()
+    .references(() => customers._id, { onDelete: 'cascade' }),
+  // plate-linked, one active-at-a-time — enforced in membershipController, not a DB
+  // constraint (a vehicle may have a past cancelled subscription on record).
+  vehicle: uuid('vehicle_id')
+    .notNull()
+    .references(() => vehicles._id, { onDelete: 'cascade' }),
+  plan: uuid('plan_id')
+    .notNull()
+    .references(() => membershipPlans._id, { onDelete: 'restrict' }),
+  billingDayOfMonth: integer('billing_day_of_month').notNull(),
+  nextBillingDate: timestamp('next_billing_date', { withTimezone: true }),
+  pausedUntil: timestamp('paused_until', { withTimezone: true }),
+  washesThisCycle: integer('washes_this_cycle').notNull().default(0),
+  failedPaymentAttempts: integer('failed_payment_attempts').notNull().default(0),
+  status: text('status').notNull().default('active'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 module.exports = {
@@ -242,4 +301,6 @@ module.exports = {
   serviceBays,
   washOrders,
   customerMessages,
+  membershipPlans,
+  membershipSubscriptions,
 };

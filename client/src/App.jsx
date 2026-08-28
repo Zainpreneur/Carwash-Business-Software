@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import WashQueue from './pages/WashQueue'
 import FloorQueue from './pages/FloorQueue'
 import Checkout from './pages/Checkout'
+import MembershipPlans from './pages/MembershipPlans'
 import Bookings from './pages/Bookings'
 import Customers from './pages/Customers'
 import Vehicles from './pages/Vehicles'
@@ -41,6 +42,7 @@ function App() {
 
             <Route element={<RoleRoute roles={['admin', 'manager']} />}>
               <Route path="/wash-queue" element={<WashQueue />} />
+              <Route path="/memberships" element={<MembershipPlans />} />
               <Route path="/staff" element={<Staff />} />
               <Route path="/expenses" element={<Expenses />} />
               <Route path="/reports" element={<Reports />} />

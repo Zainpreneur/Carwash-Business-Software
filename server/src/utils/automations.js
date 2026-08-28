@@ -1,34 +1,86 @@
-// Deterministic "always do X when Y" automations for the primary wash lifecycle
-// (carwash-compile/03-operations/automations.md). Only the 3 scoped to WashOrder/ServiceBay
-// are implemented here — the rest depend on entities not yet built (MembershipSubscription,
-// Stock, MaintenanceOrder, Shift, Invoice, Ticket). Anything requiring judgment (real bay-
-// dispatch rebalancing, telemetry drift detection) is explicitly an AI agent in the spec,
-// not an automation — bay-down-reroute here uses the same deterministic auto-assign logic
-// as a manual bay assignment as a stand-in for the future queue-dispatch-agent.
+// Deterministic "always do X when Y" automations (carwash-compile/03-operations/automations.md).
+// Only the 4 scoped to WashOrder/ServiceBay/MembershipSubscription are implemented — the rest
+// depend on entities not yet built (Stock, MaintenanceOrder, Shift, Invoice, Ticket) or a job
+// scheduler (the -3d/-2h reminders). Anything requiring judgment (real bay-dispatch
+// rebalancing, telemetry drift detection) is explicitly an AI agent in the spec, not an
+// automation — bay-down-reroute here uses the same deterministic auto-assign logic as a
+// manual bay assignment as a stand-in for the future queue-dispatch-agent.
 const { eq, and, inArray, gte, count } = require('drizzle-orm');
 const { db } = require('../config/db');
-const { washOrders, washPackages, serviceBays, customers, customerMessages, notifications } = require('../db/schema');
+const {
+  washOrders,
+  washPackages,
+  serviceBays,
+  vehicles,
+  customers,
+  customerMessages,
+  notifications,
+  membershipSubscriptions,
+  membershipPlans,
+} = require('../db/schema');
 const { notifyRoles } = require('./notify');
 const { findOpenBay } = require('./bays');
+const { sendWhatsAppTemplate } = require('./whatsapp');
 
 const NON_TERMINAL_STATUSES = ['queued', 'bay-assigned', 'in-wash', 'quality-check', 'ready-for-pickup'];
 
+// Sends (or, if WhatsApp isn't configured, attempts and logs the outcome of) a template
+// message and records it to customer_messages either way — the shared plumbing every
+// customer-facing automation in this file uses.
+const sendAndLog = async (customer, { washOrderId, template, automation, params }) => {
+  const result = await sendWhatsAppTemplate(customer.phone, template, params);
+  await db.insert(customerMessages).values({
+    customer: customer._id,
+    washOrder: washOrderId || null,
+    channel: 'whatsapp',
+    template,
+    automation,
+    status: result.status,
+    error: result.error || null,
+  });
+  return result;
+};
+
 // notify-ready-for-pickup: WashOrder QualityCheck -> ReadyForPickup, condition
-// customer.whatsappOptIn == true, action send-whatsapp `wash-ready`. No real WhatsApp
-// integration yet (needs Meta Business credentials — a later deployment-guide phase), so
-// this logs the decision to customer_messages instead of silently doing nothing; anonymous
-// walk-ins (no customer) and opted-out customers are silently skipped, matching the
-// workflow's own "not a hard failure" handling.
+// customer.whatsappOptIn == true, action send-whatsapp `wash-ready`. Anonymous walk-ins (no
+// customer) and opted-out customers are silently skipped, matching the workflow's own "not
+// a hard failure" handling.
 const notifyReadyForPickup = async (order) => {
   if (!order.customer) return;
   const [customer] = await db.select().from(customers).where(eq(customers._id, order.customer));
   if (!customer || !customer.whatsappOptIn) return;
-  await db.insert(customerMessages).values({
-    customer: customer._id,
-    washOrder: order._id,
-    channel: 'whatsapp',
+  const [vehicle] = await db.select().from(vehicles).where(eq(vehicles._id, order.vehicle));
+  const [bay] = order.bay ? await db.select().from(serviceBays).where(eq(serviceBays._id, order.bay)) : [];
+
+  await sendAndLog(customer, {
+    washOrderId: order._id,
     template: 'wash-ready',
     automation: 'notify-ready-for-pickup',
+    params: { customerName: customer.name, vehiclePlate: vehicle?.plateNumber, bayNumber: bay?.bayNumber },
+  });
+};
+
+// membership-payment-failed-dunning: MembershipSubscription Active -> PastDue, action
+// send-whatsapp `payment-failed-update-card` (the escalation ladder past WhatsApp — email,
+// then a phone-line-agent callback — needs channels this app doesn't have yet, so this
+// covers the first rung only). Called from the Stripe webhook handler on invoice.payment_failed.
+const membershipPaymentFailedDunning = async (subscription) => {
+  const [customer] = await db.select().from(customers).where(eq(customers._id, subscription.customer));
+  const [plan] = await db.select().from(membershipPlans).where(eq(membershipPlans._id, subscription.plan));
+  if (!customer) return;
+
+  if (customer.whatsappOptIn) {
+    await sendAndLog(customer, {
+      template: 'payment-failed-update-card',
+      automation: 'membership-payment-failed-dunning',
+      params: { customerName: customer.name, planName: plan?.name, updateLink: '(update via Settings)' },
+    });
+  }
+
+  await notifyRoles(['admin', 'manager'], {
+    type: 'membership_payment_failed',
+    title: 'Membership payment failed',
+    message: `${customer.name}'s ${plan?.name || 'membership'} payment failed (attempt ${subscription.failedPaymentAttempts}).`,
   });
 };
 
@@ -126,4 +178,30 @@ const handleBayDown = async (bay, actorUserId) => {
   );
 };
 
-module.exports = { notifyReadyForPickup, checkQueueWaitAlert, handleBayDown };
+// enroll-membership workflow's final step: "wash-concierge sends welcome message with
+// plate-verification explainer" (data-model.md). Called once a MembershipSubscription is
+// actually Active — either immediately (no-Stripe demo mode) or from the Stripe webhook
+// once checkout.session.completed confirms real payment.
+const sendMembershipWelcome = async (subscription) => {
+  const [customer] = await db.select().from(customers).where(eq(customers._id, subscription.customer));
+  if (!customer || !customer.whatsappOptIn) return;
+  const [plan] = await db.select().from(membershipPlans).where(eq(membershipPlans._id, subscription.plan));
+
+  await sendAndLog(customer, {
+    template: 'membership-welcome',
+    automation: 'enroll-membership',
+    params: {
+      customerName: customer.name,
+      planName: plan?.name,
+      billingDate: subscription.nextBillingDate ? new Date(subscription.nextBillingDate).toDateString() : undefined,
+    },
+  });
+};
+
+module.exports = {
+  notifyReadyForPickup,
+  checkQueueWaitAlert,
+  handleBayDown,
+  membershipPaymentFailedDunning,
+  sendMembershipWelcome,
+};

@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LogOut, DollarSign, CreditCard, Users2 } from 'lucide-react'
+import { LogOut, DollarSign, CreditCard, Users2, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { washOrdersApi } from '../api/resources'
 import { getErrorMessage } from '../api/client'
 import Spinner from '../components/ui/Spinner'
 import EmptyState from '../components/ui/EmptyState'
 import StatCard from '../components/ui/StatCard'
+import MembershipSignupModal from '../components/washqueue/MembershipSignupModal'
 
 // Cashier home view (carwash-compile/01-foundation/dashboards.md): the checkout queue
-// (ReadyForPickup orders) plus today's revenue split. Membership sign-up is not built yet
-// (MembershipSubscription is a later-phase entity — see README).
+// (ReadyForPickup orders), today's revenue split, and the membership-signup shortcut.
 
 const currency = (n) => `$${Number(n || 0).toFixed(2)}`
 
@@ -19,6 +19,7 @@ const Checkout = () => {
   const [loading, setLoading] = useState(true)
   const [methods, setMethods] = useState({})
   const [busyId, setBusyId] = useState(null)
+  const [signupOpen, setSignupOpen] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -32,6 +33,15 @@ const Checkout = () => {
   }, [])
 
   useEffect(load, [load])
+
+  // Returning from a Stripe Checkout redirect (see MembershipSignupModal's success/cancel URLs).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const membership = params.get('membership')
+    if (membership === 'success') toast.success('Membership signed up — welcome message sent!')
+    else if (membership === 'cancelled') toast('Membership signup cancelled', { icon: 'ℹ️' })
+    if (membership) window.history.replaceState({}, '', window.location.pathname)
+  }, [])
 
   const confirmCheckout = async (o) => {
     setBusyId(o._id)
@@ -50,6 +60,12 @@ const Checkout = () => {
 
   return (
     <div className="space-y-5">
+      <div className="flex justify-end">
+        <button className="btn-secondary" onClick={() => setSignupOpen(true)}>
+          <UserPlus size={16} /> New membership
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard icon={DollarSign} label="Today's revenue" value={currency(stats?.totalRevenue)} tone="green" />
         <StatCard icon={LogOut} label="Checked out" value={stats?.checkedOutToday ?? 0} tone="brand" />
@@ -92,6 +108,8 @@ const Checkout = () => {
           </div>
         )}
       </div>
+
+      <MembershipSignupModal open={signupOpen} onClose={() => setSignupOpen(false)} onSaved={() => { setSignupOpen(false); load() }} />
     </div>
   )
 }

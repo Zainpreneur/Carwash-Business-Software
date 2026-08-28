@@ -42,6 +42,19 @@ export const bookingsApi = {
 export const washPackagesApi = makeResource('/wash-packages')
 export const serviceBaysApi = makeResource('/service-bays')
 
+export const membershipPlansApi = makeResource('/membership-plans')
+export const membershipSubscriptionsApi = {
+  list: (params) => apiClient.get('/membership-subscriptions', { params }).then((r) => r.data),
+  create: (data) => apiClient.post('/membership-subscriptions', data).then((r) => r.data),
+  pause: (id, pausedUntil) => apiClient.patch(`/membership-subscriptions/${id}/pause`, { pausedUntil }).then((r) => r.data),
+  resume: (id) => apiClient.patch(`/membership-subscriptions/${id}/resume`).then((r) => r.data),
+  cancel: (id) => apiClient.patch(`/membership-subscriptions/${id}/cancel`).then((r) => r.data),
+}
+
+export const integrationsApi = {
+  status: () => apiClient.get('/integrations/status').then((r) => r.data),
+}
+
 export const washOrdersApi = {
   ...makeResource('/wash-orders'),
   assignBay: (id, bayId) => apiClient.patch(`/wash-orders/${id}/assign-bay`, bayId ? { bayId } : {}).then((r) => r.data),
