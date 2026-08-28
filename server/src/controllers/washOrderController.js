@@ -1,9 +1,10 @@
 const asyncHandler = require('express-async-handler');
 const { eq, desc, and, gte, lte, sql, count, inArray, ilike } = require('drizzle-orm');
 const { db } = require('../config/db');
-const { washOrders, customers, vehicles, washPackages, serviceBays, users } = require('../db/schema');
+const { washOrders, customers, vehicles, washPackages, serviceBays, users, customerMessages } = require('../db/schema');
 const { notifyRoles } = require('../utils/notify');
-const { ACTIVE_STATUSES } = require('./serviceBayController');
+const { findOpenBay } = require('../utils/bays');
+const { notifyReadyForPickup, checkQueueWaitAlert } = require('../utils/automations');
 
 // wash-a-vehicle state machine (carwash-compile/01-foundation/data-model.md), kebab-cased
 // to match this app's convention: Queued=queued, BayAssigned=bay-assigned, InWash=in-wash,
@@ -135,6 +136,29 @@ const getCheckoutStats = asyncHandler(async (req, res) => {
   });
 });
 
+// Audit trail for the notify-ready-for-pickup automation — what each firing decided to send,
+// since there's no real WhatsApp transport yet to show a delivered message. admin/manager
+// only (customer contact history, not a floor-staff concern).
+const getCustomerMessages = asyncHandler(async (req, res) => {
+  const rows = await db
+    .select({
+      _id: customerMessages._id,
+      customer: { _id: customers._id, name: customers.name },
+      washOrder: { _id: washOrders._id, orderNumber: washOrders.orderNumber },
+      channel: customerMessages.channel,
+      template: customerMessages.template,
+      automation: customerMessages.automation,
+      status: customerMessages.status,
+      createdAt: customerMessages.createdAt,
+    })
+    .from(customerMessages)
+    .innerJoin(customers, eq(customerMessages.customer, customers._id))
+    .leftJoin(washOrders, eq(customerMessages.washOrder, washOrders._id))
+    .orderBy(desc(customerMessages.createdAt))
+    .limit(100);
+  res.json(rows);
+});
+
 const getWashOrder = asyncHandler(async (req, res) => {
   const [row] = await baseQuery().where(eq(washOrders._id, req.params.id));
   if (!row) {
@@ -202,6 +226,7 @@ const createWashOrder = asyncHandler(async (req, res) => {
     },
     req.user._id
   ).catch(() => {});
+  checkQueueWaitAlert(req.user._id).catch(() => {});
 
   const [full] = await baseQuery().where(eq(washOrders._id, order._id));
   res.status(201).json(full);
@@ -243,20 +268,11 @@ const assignBay = asyncHandler(async (req, res) => {
       throw new Error('Selected bay is not operational');
     }
   } else {
-    const candidates = await db
-      .select()
-      .from(serviceBays)
-      .where(and(eq(serviceBays.bayType, laneBayType), eq(serviceBays.operationalStatus, 'operational')))
-      .orderBy(serviceBays.bayNumber);
-    const occupied = await db
-      .select({ bay: washOrders.bay })
-      .from(washOrders)
-      .where(inArray(washOrders.status, ACTIVE_STATUSES));
-    const occupiedIds = new Set(occupied.map((o) => o.bay));
-    bay = candidates.find((b) => !occupiedIds.has(b._id));
+    bay = await findOpenBay(laneBayType);
   }
 
   if (!bay) {
+    checkQueueWaitAlert(req.user._id).catch(() => {});
     res.status(409);
     throw new Error('No bay available right now — vehicle stays queued. Escalate to site manager for overflow.');
   }
@@ -265,6 +281,7 @@ const assignBay = asyncHandler(async (req, res) => {
     .update(washOrders)
     .set({ bay: bay._id, status: 'bay-assigned', bayAssignedAt: new Date(), updatedAt: new Date() })
     .where(eq(washOrders._id, order._id));
+  checkQueueWaitAlert(req.user._id).catch(() => {});
 
   await respondUpdated(res, order._id);
 });
@@ -308,6 +325,7 @@ const qualityCheck = asyncHandler(async (req, res) => {
       { type: 'wash_order_ready', title: 'Ready for pickup', message: `${order.orderNumber} passed QC — ready for pickup.` },
       req.user._id
     ).catch(() => {});
+    notifyReadyForPickup(order).catch(() => {}); // notify-ready-for-pickup automation
   }
 
   await respondUpdated(res, order._id);
@@ -360,6 +378,7 @@ const cancelWashOrder = asyncHandler(async (req, res) => {
     .update(washOrders)
     .set({ status: 'cancelled', updatedAt: new Date() })
     .where(eq(washOrders._id, order._id));
+  checkQueueWaitAlert(req.user._id).catch(() => {});
   await respondUpdated(res, order._id);
 });
 
@@ -375,6 +394,7 @@ const deleteWashOrder = asyncHandler(async (req, res) => {
 module.exports = {
   getWashOrders,
   getCheckoutStats,
+  getCustomerMessages,
   getWashOrder,
   createWashOrder,
   assignBay,
