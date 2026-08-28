@@ -23,6 +23,7 @@ import Finance from './pages/Finance'
 import Reports from './pages/Reports'
 import Simulations from './pages/Simulations'
 import OpsCenter from './pages/OpsCenter'
+import Growth from './pages/Growth'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
 
@@ -60,6 +61,7 @@ function App() {
               <Route path="/reports" element={<Reports />} />
               <Route path="/simulations" element={<Simulations />} />
               <Route path="/ops-center" element={<OpsCenter />} />
+              <Route path="/growth" element={<Growth />} />
             </Route>
           </Route>
         </Route>

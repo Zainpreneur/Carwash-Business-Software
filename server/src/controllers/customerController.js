@@ -88,8 +88,17 @@ const getCustomer = asyncHandler(async (req, res) => {
   });
 });
 
+// Referral program (04-growth/marketing.md) — every customer gets a stable, shareable
+// referralCode at creation; collision odds are negligible at this app's scale, and a
+// unique-constraint violation surfaces as a real error rather than silently duplicating.
+const generateReferralCode = (name) => {
+  const base = (name || 'CUST').replace(/[^a-zA-Z]/g, '').slice(0, 6).toUpperCase() || 'CUST';
+  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${base}-${suffix}`;
+};
+
 const createCustomer = asyncHandler(async (req, res) => {
-  const { name, email, phone, address, notes, loyaltyPoints } = req.body;
+  const { name, email, phone, address, notes, loyaltyPoints, referredByCode } = req.body;
   const [customer] = await db
     .insert(customers)
     .values({
@@ -99,13 +108,15 @@ const createCustomer = asyncHandler(async (req, res) => {
       address,
       notes,
       loyaltyPoints,
+      referralCode: generateReferralCode(name),
+      referredByCode: referredByCode || undefined,
     })
     .returning();
   res.status(201).json(customer);
 });
 
 const updateCustomer = asyncHandler(async (req, res) => {
-  const allowed = ['name', 'email', 'phone', 'address', 'notes', 'loyaltyPoints', 'active'];
+  const allowed = ['name', 'email', 'phone', 'address', 'notes', 'loyaltyPoints', 'active', 'isFleetAccount', 'referredByCode'];
   const updates = {};
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];

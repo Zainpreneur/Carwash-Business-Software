@@ -139,6 +139,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Inventory | `GET/POST /inventory/supplies`, `PUT/DELETE /inventory/supplies/:id`, `GET/POST /inventory/adjustments`, `GET/POST /inventory/purchase-orders`, `GET /inventory/purchase-orders/:id`, `PATCH /inventory/purchase-orders/:id/{approve,receive,close}`, `GET /inventory/forecast`, `POST /inventory/forecast/run` (admin/manager) |
 | Simulations | `GET /simulations/{bay-throughput,demand-forecast,staffing-capacity,membership-economics,cash-flow-forecast}`, `POST /simulations/pricing-scenario` (admin/manager) |
 | Agent ops | `GET /agent-ops/orchestrator-snapshot`, `POST /agent-ops/strategy-advisor/ask`, `GET /agent-ops/strategy-advisor/history`, `GET /agent-ops/system-health-report` (admin/manager) |
+| Growth | `GET /growth/segments/{summary,customers}`, `GET/POST /growth/fleet-inquiries`, `PATCH /growth/fleet-inquiries/:id/status`, `GET/POST /growth/reviews` (admin/manager) |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -147,25 +148,28 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
 | HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision`, `GET/POST /hr/payroll-runs`, `GET /hr/payroll-runs/:id` (admin/manager) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
 8-step build order; **all 8 steps have something real and live**, though step 6 (the AI
-agent roster) and step 7 (growth/CRM) are each partial — (1) the data model +
+agent roster) is still missing the three agents that genuinely need IoT telemetry or a
+telephony API — (1) the data model +
 primary wash lifecycle, (2) role-based UI, (3) RBAC (folded into the Phase 2 work), (4) the
 lifecycle's automations, (5) the two integrations the primary lifecycle needs (Stripe,
-WhatsApp Cloud API), (6) seven of the 12-agent roster — `queue-dispatch-agent`'s overflow
+WhatsApp Cloud API), (6) nine of the 12-agent roster — `queue-dispatch-agent`'s overflow
 judgment call, `wash-concierge` (the customer-facing WhatsApp chat agent),
 `membership-billing-agent` (the past-due/suspended/cancelled lifecycle),
 `inventory-forecaster` (reorder recommendations), `ops-orchestrator` (the day's operating
-picture), and `strategy-advisor` plus `system-health-agent` (open-ended owner Q&A and a
-weekly agent-health report) — three of the seven make **no Claude call at all**, see below —
-(7) a real support-ticket system with SLAs
-that gives `wash-concierge`'s escalations somewhere to be tracked to resolution, a real
-double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that auto-posts
-from checkout, membership billing, expenses, payroll, and purchasing, a real staff roster
-with scheduling, leave, and a payroll run that posts to that same ledger
+picture), `strategy-advisor` plus `system-health-agent` (open-ended owner Q&A and a
+weekly agent-health report), and `fleet-lead-scorer` plus `review-response-agent` (the
+growth cluster's two task agents) — five of the nine make **no Claude call at all**, see
+below — (7) a real support-ticket system with SLAs
+that gives `wash-concierge`'s escalations somewhere to be tracked to resolution, real
+customer segmentation and a referral program (`carwash-compile/04-growth/marketing.md`), a
+real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that
+auto-posts from checkout, membership billing, expenses, payroll, and purchasing, a real
+staff roster with scheduling, leave, and a payroll run that posts to that same ledger
 (`carwash-compile/03-operations/hr.md`), and a real inventory/purchasing module
 (`carwash-compile/03-operations/inventory.md`) that closes the ledger's own previously-dead
 `1400`/`2000`/`5700` accounts, and (8) five of `02-intelligence/simulation.md`'s seven
@@ -467,12 +471,47 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
     this app doesn't have (the same documented gap as the -3d/-2h reminder jobs and
     proactive SLA alerts) — a site-manager runs both on demand from the new `/ops-center`
     page instead.
-- **Not built yet** (later phases per the spec's own build order): the rest of the AI agent
-  roster (`predictive-maintenance-agent` and `quality-anomaly-detector` — need IoT telemetry
-  this app has no sensors for; `review-response-agent`, `phone-line-agent`,
-  `fleet-lead-scorer` — need channels/entities this app doesn't have); the wash-sensor/IoT
-  platform; the -3d/-2h reminder jobs and proactive SLA-breach alerting (need a scheduler
-  this app doesn't run yet); and social/marketing —
+- **Growth cluster** (`carwash-compile/04-growth/marketing.md`, `04-growth/social-media.md`)
+  — the two remaining task agents this app can build against real (if manually-entered)
+  data rather than a live ad-platform or Google Business Profile connector it has no
+  credentials for, plus the spec's own customer segmentation and referral program.
+  - **Customer segmentation** (`server/src/services/segmentService.js`) — the marketing
+    spec's own 7-segment table (New / Active Pay-Per-Wash / Active Member / At-Risk Member /
+    At-Risk Pay-Per-Wash / Lapsed / Fleet-Commercial), computed live from real `WashOrder`/
+    `MembershipSubscription` data, with an explicit precedence order for a customer whose
+    segments would otherwise overlap (e.g. a fleet account is always Fleet/Commercial first).
+    The spec's own "2+ missed expected visits this cycle" clause for At-Risk Member isn't
+    computed — this app has no per-member expected-visit-cadence baseline to miss against —
+    so only the "recent PastDue" half of that definition is checked.
+  - **`fleet-lead-scorer`** makes **no Claude call** — scoring three stated inputs (vehicle
+    count, contact pattern, invoicing-terms request) against stated point values is
+    arithmetic, not a judgment call. New `Customer.isFleetAccount` field and `fleet_inquiries`
+    table; never commits to custom pricing itself, only ever a staff notification.
+  - **`review-response-agent`** also makes **no Claude call**, deliberately: the guardrail
+    ("never auto-responds to a review below 4 stars or one mentioning damage/injury/billing")
+    is a rating threshold plus a keyword check, not free-form sentiment judgment — a
+    coarser check than an LLM's read, but one that never has a false "auto-responded" on a
+    review that should have been escalated, the conservative failure mode the spec's own
+    reputational-risk framing asks for. A positive review with no flagged keywords
+    auto-thanks with a loyalty-point credit; anything else opens a real `Ticket` and alerts
+    staff immediately, never auto-responded.
+  - **Referral program**: every customer gets a stable `referralCode` at creation;
+    `referredByCode` is checked once, on a referred customer's first-ever completed
+    `WashOrder`, crediting the referrer a free-wash credit (modeled as loyalty points, since
+    there's no redeemable-credit ledger or checkout-time "apply a free wash" flow to redeem
+    a real credit against). **New-customer-welcome** fires its day-0 rung (thank-you +
+    loyalty-points explainer) on that same first wash.
+  - `/growth` (admin/manager, tabbed: Segments / Fleet Inquiries / Reviews).
+  - **Not built**: the day-3/day-10 (new-customer-welcome) and day-4/day-8 (at-risk-member-
+    winback, whose day-0 the finance phase's own payment-failed dunning already covers)
+    follow-up rungs of each lifecycle drip (need a scheduler this app doesn't have); the
+    `SocialPost` content-calendar publishing pipeline; paid ad campaigns and A/B testing
+    (need real ad-platform accounts); and the Google Business Profile/social-mention
+    monitoring that would detect a review automatically instead of a staff member logging it.
+- **Not built yet**: the rest of the AI agent roster (`predictive-maintenance-agent` and
+  `quality-anomaly-detector` — need IoT telemetry this app has no sensors for; `phone-line-agent`
+  — needs a real telephony API); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and
+  proactive SLA-breach alerting (need a scheduler this app doesn't run yet) —
   and RBAC only covers this app's existing admin/manager/staff login roles, not the spec's
   full 7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
   Technician/Cashier/Fleet Account Manager) — the new `Employee.position` field captures the

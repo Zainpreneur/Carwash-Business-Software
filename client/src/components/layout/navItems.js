@@ -19,6 +19,7 @@ import {
   Boxes,
   Telescope,
   LayoutGrid,
+  Megaphone,
 } from 'lucide-react'
 
 // Role-based wash-floor views (carwash-compile/01-foundation/dashboards.md):
@@ -45,5 +46,6 @@ export const navItems = [
   { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'manager'] },
   { to: '/simulations', label: 'Simulations', icon: Telescope, roles: ['admin', 'manager'] },
   { to: '/ops-center', label: 'Ops Center', icon: LayoutGrid, roles: ['admin', 'manager'] },
+  { to: '/growth', label: 'Growth', icon: Megaphone, roles: ['admin', 'manager'] },
   { to: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'manager', 'staff'] },
 ]

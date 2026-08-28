@@ -68,6 +68,21 @@ const statusColor = {
   sent: 'blue',
   'partially-received': 'amber',
   received: 'cyan',
+  // fleet inquiry status (04-growth/marketing.md)
+  new: 'blue',
+  'followed-up': 'cyan',
+  converted: 'green',
+  declined: 'slate',
+  // review-response-agent status
+  'auto-responded': 'green',
+  escalated: 'red',
+  // customer segments
+  'active-member': 'green',
+  'at-risk-member': 'amber',
+  'active-pay-per-wash': 'blue',
+  'at-risk-pay-per-wash': 'amber',
+  lapsed: 'slate',
+  'fleet-commercial': 'purple',
 }
 
 const Badge = ({ children, color, status, className = '' }) => {
