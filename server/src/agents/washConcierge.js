@@ -28,12 +28,23 @@ const {
   membershipPlans,
   membershipSubscriptions,
   agentConversations,
+  tickets,
 } = require('../db/schema');
 const { isAgentsConfigured, getAnthropicClient, AGENT_MODEL } = require('../config/anthropic');
 const { isWhatsAppConfigured, sendWhatsAppText } = require('../utils/whatsapp');
 const { notifyRoles } = require('../utils/notify');
 const membershipService = require('../services/membershipService');
 const { getStripe, isStripeConfigured } = require('../config/stripe');
+
+// escalate_to_human's reason -> Ticket.category (04-growth/crm.md's category list). "other"
+// and "negative-sentiment"/"low-confidence" don't map to a specific SLA-bearing category, so
+// they fall back to "general" — still a real, trackable ticket, just the default SLA.
+const REASON_TO_CATEGORY = {
+  'damage-claim': 'damage-claim',
+  'refund-request': 'billing-dispute',
+  'negative-sentiment': 'quality-complaint',
+};
+const categoryFor = (reason) => REASON_TO_CATEGORY[reason] || 'general';
 
 const NON_TERMINAL_STATUSES = ['queued', 'bay-assigned', 'in-wash', 'quality-check', 'ready-for-pickup'];
 const ACTIVE_SUB_STATUSES = ['active', 'past-due', 'suspended', 'paused'];
@@ -215,12 +226,32 @@ const executeTool = async (name, input, ctx) => {
     }
 
     case 'escalate_to_human': {
+      // Give the escalation somewhere to be tracked to resolution, not just a fire-and-forget
+      // notification — a real Ticket (04-growth/crm.md), SLA-timed by category. A ticket
+      // needs a Customer row (schema: customer is required); an unrecognized sender still
+      // gets the staff notification, just no ticket — nothing to attach it to yet.
+      let ticketId = null;
+      if (ctx.customer) {
+        const [created] = await db
+          .insert(tickets)
+          .values({
+            customer: ctx.customer._id,
+            subject: `wash-concierge escalation: ${input.reason}`,
+            category: categoryFor(input.reason),
+            priority: input.reason === 'damage-claim' ? 'high' : 'normal',
+            description: input.summary,
+            source: 'whatsapp',
+          })
+          .returning();
+        ticketId = created._id;
+      }
+
       await notifyRoles(['admin', 'manager'], {
         type: 'wash_concierge_escalation',
         title: `Concierge escalation: ${input.reason}`,
         message: `${ctx.customer?.name || ctx.phone}: ${input.summary}`,
       });
-      return { escalated: true };
+      return { escalated: true, ticketId };
     }
 
     default:

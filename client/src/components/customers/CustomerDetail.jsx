@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
-import { Car, Phone, Mail, MapPin } from 'lucide-react'
+import { Car, Phone, Mail, MapPin, Users2, LifeBuoy } from 'lucide-react'
 import { customersApi } from '../../api/resources'
 import Modal from '../ui/Modal'
 import Spinner from '../ui/Spinner'
@@ -66,6 +66,50 @@ const CustomerDetail = ({ customerId, onClose }) => {
               </div>
             ) : (
               <p className="text-sm text-slate-400">No vehicles on file.</p>
+            )}
+          </div>
+
+          <div>
+            <h4 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+              <Users2 size={15} /> Membership
+            </h4>
+            {customer.membership ? (
+              <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <div>
+                  <p className="font-medium text-slate-800">{customer.membership.plan?.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {customer.membership.washesThisCycle} washes this cycle
+                    {customer.membership.nextBillingDate && ` · next bill ${format(new Date(customer.membership.nextBillingDate), 'MMM d, yyyy')}`}
+                  </p>
+                </div>
+                <Badge status={customer.membership.status}>{customer.membership.status}</Badge>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">No active membership.</p>
+            )}
+          </div>
+
+          <div>
+            <h4 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+              <LifeBuoy size={15} /> Support tickets {customer.openTicketCount > 0 && `(${customer.openTicketCount} open)`}
+            </h4>
+            {customer.tickets?.length ? (
+              <div className="space-y-2">
+                {customer.tickets.map((t) => (
+                  <div key={t._id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <div>
+                      <p className="font-medium text-slate-800">{t.subject}</p>
+                      <p className="text-xs text-slate-500">{t.category} · {format(new Date(t.createdAt), 'MMM d, yyyy')}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {t.sla?.breached && <Badge color="red">SLA breached</Badge>}
+                      <Badge status={t.status}>{t.status}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">No support tickets.</p>
             )}
           </div>
 

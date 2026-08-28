@@ -139,21 +139,24 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
 | Concierge | `GET /concierge/conversations`, `POST /concierge/simulate` (admin/manager — exercises `wash-concierge` without a real WhatsApp number) |
+| Tickets | `GET/POST /tickets`, `GET /tickets/:id`, `PATCH /tickets/:id/{status,assign}`, `POST /tickets/:id/comments` |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5 & most of 6)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, plus CRM/support)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
-8-step build order; **steps 1–5, plus the two highest-leverage agents from step 6, are built
-and live** as an additive module alongside the existing booking-based app — (1) the data
-model + primary wash lifecycle, (2) role-based UI, (3) RBAC (folded into the Phase 2 work),
-(4) the lifecycle's automations, (5) the two integrations the primary lifecycle needs
-(Stripe, WhatsApp Cloud API), and (6) `queue-dispatch-agent`'s overflow judgment call plus
-`wash-concierge`, the customer-facing WhatsApp chat agent. All of Stripe, WhatsApp, and the
-AI agents are **credential-gated**: this session has none of the underlying real accounts,
-so each feature runs in a graceful fallback mode until real keys are added to
-`server/.env` — nothing crashes or silently pretends to work without them. The rest of step
-6, the wash-sensor/IoT platform, and the growth/finance/HR clusters are still ahead — see
+8-step build order; **steps 1–5, the two highest-leverage agents from step 6, and the CRM
+Ticket entity from step 7, are built and live** as an additive module alongside the existing
+booking-based app — (1) the data model + primary wash lifecycle, (2) role-based UI, (3) RBAC
+(folded into the Phase 2 work), (4) the lifecycle's automations, (5) the two integrations
+the primary lifecycle needs (Stripe, WhatsApp Cloud API), (6) `queue-dispatch-agent`'s
+overflow judgment call plus `wash-concierge`, the customer-facing WhatsApp chat agent, and
+(7) a real support-ticket system with SLAs that gives `wash-concierge`'s escalations
+somewhere to be tracked to resolution. All of Stripe, WhatsApp, and the AI agents are
+**credential-gated**: this session has none of the underlying real accounts, so each
+feature runs in a graceful fallback mode until real keys are added to `server/.env` —
+nothing crashes or silently pretends to work without them. The rest of step 6, the
+wash-sensor/IoT platform, and the growth/finance/HR clusters are still ahead — see
 "Not built yet" below.
 
 - **Data model**: `WashPackage` (+ 3-tier `PackagePricing`), `ServiceBay`, `WashOrder` — see
@@ -240,13 +243,38 @@ so each feature runs in a graceful fallback mode until real keys are added to
     separate platform feature, not a conversational capability — and a real
     `knowledge_base.search` tool (no KB entity built yet); FAQ content is folded into the
     system prompt instead.
+- **CRM & support** (`carwash-compile/04-growth/crm.md`, `server/src/controllers/ticketController.js`)
+  — a real `Ticket` entity (damage claims, billing disputes, quality complaints, membership
+  questions), state-machined `open → in-progress → waiting-on-customer/resolved → closed`
+  (server-enforced, `ticketController.js`'s `ALLOWED_TRANSITIONS`; reopening a resolved/closed
+  ticket back to `in-progress` is a practical addition beyond the spec's own table).
+  - **SLAs** (`server/src/utils/tickets.js`) — a first-response and resolution deadline per
+    category, from the spec's own SLA table, computed live on every read rather than pushed
+    proactively (this app has no job scheduler — see the reminder-jobs note below); "at risk"
+    means inside the last 25% of the deadline window, not yet breached. Calendar-time
+    deadlines, not the spec's business-hours-aware version — a documented simplification.
+  - **`wash-concierge` now has somewhere to send an escalation**: `escalate_to_human` creates
+    a real Ticket (category derived from the escalation reason — damage claim, refund
+    request, negative sentiment, or general) alongside the existing staff notification, so a
+    chat escalation is trackable to resolution instead of a fire-and-forget alert.
+  - **Customer 360** (`GET /api/customers/:id`, the customer profile modal) — membership
+    status and support-ticket history alongside existing wash/booking history, per the
+    spec's `customer360Includes`.
+  - `/tickets` ("Support" in the sidebar, open to all roles) — filterable list with SLA-risk
+    indicators, a detail view with status-transition actions, staff assignment, and a comment
+    thread.
+  - **Not built** from the spec's own text: the sales pipeline (the spec's own guidance is to
+    skip it — no real inbound-lead volume to justify it yet) and a unified omni-channel
+    thread linking WhatsApp/email/in-app messages onto one ticket (comments today are
+    staff-authored or system-generated only).
 - **Not built yet** (later phases per the spec's own build order): the rest of the AI agent
   roster (`membership-billing-agent`, `predictive-maintenance-agent` — needs IoT telemetry —
-  and the other 8); the wash-sensor/IoT platform; the -3d/-2h reminder jobs (need a scheduler
-  this app doesn't run yet); social/marketing/CRM; the accounting ledger; and HR/payroll —
-  and RBAC only covers this app's existing admin/manager/staff roles, not the spec's full
-  7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
-  Technician/Cashier/Fleet Account Manager), which would need its own `Employee` entity.
+  and the other 8); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and proactive
+  SLA-breach alerting (need a scheduler this app doesn't run yet); social/marketing; the
+  accounting ledger; and HR/payroll — and RBAC only covers this app's existing
+  admin/manager/staff roles, not the spec's full 7-role breakdown (Owner/Site Manager/Bay
+  Attendant/Wash Technician/Detail Technician/Cashier/Fleet Account Manager), which would
+  need its own `Employee` entity.
 
 ## Responsiveness
 
