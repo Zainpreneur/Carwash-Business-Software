@@ -5,6 +5,7 @@ const { washOrders, customers, vehicles, washPackages, serviceBays, users, custo
 const { notifyRoles } = require('../utils/notify');
 const { findOpenBay } = require('../utils/bays');
 const { notifyReadyForPickup, checkQueueWaitAlert } = require('../utils/automations');
+const { postWashOrderCheckout } = require('../services/ledgerService');
 
 // wash-a-vehicle state machine (carwash-compile/01-foundation/data-model.md), kebab-cased
 // to match this app's convention: Queued=queued, BayAssigned=bay-assigned, InWash=in-wash,
@@ -369,6 +370,12 @@ const checkout = asyncHandler(async (req, res) => {
     },
     req.user._id
   ).catch(() => {});
+
+  // Auto-posting rule (05-finance/accounting.md) — checkout is the spec's own first example
+  // of a workflow step that moves money.
+  postWashOrderCheckout({ ...order, paymentMethod: paymentMethod || order.paymentMethod }).catch((err) =>
+    console.error('[ledger] wash order checkout post failed:', err.message)
+  );
 
   await respondUpdated(res, order._id);
 });

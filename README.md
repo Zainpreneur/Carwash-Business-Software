@@ -108,6 +108,7 @@ seed` once the stack is up if you want demo data.
 | `WHATSAPP_VERIFY_TOKEN` | Optional — required for Meta to register the `/api/webhooks/whatsapp` webhook URL (any string you choose). |
 | `WHATSAPP_APP_SECRET` | Optional but recommended — enables `X-Hub-Signature-256` verification on inbound webhook calls. |
 | `WHATSAPP_API_VERSION` | Optional, defaults to `v21.0`. |
+| `SALES_TAX_RATE` | Optional, defaults to `0.05` — the tax-inclusive rate backed out of `WashOrder.price` when posting to the accounting ledger. Set to the actual local car-wash-service tax rate for a real deployment. |
 
 **client/.env**
 
@@ -140,24 +141,27 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
 | Concierge | `GET /concierge/conversations`, `POST /concierge/simulate` (admin/manager — exercises `wash-concierge` without a real WhatsApp number) |
 | Tickets | `GET/POST /tickets`, `GET /tickets/:id`, `PATCH /tickets/:id/{status,assign}`, `POST /tickets/:id/comments` |
+| Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, plus CRM/support)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
-8-step build order; **steps 1–5, the two highest-leverage agents from step 6, and the CRM
-Ticket entity from step 7, are built and live** as an additive module alongside the existing
-booking-based app — (1) the data model + primary wash lifecycle, (2) role-based UI, (3) RBAC
-(folded into the Phase 2 work), (4) the lifecycle's automations, (5) the two integrations
-the primary lifecycle needs (Stripe, WhatsApp Cloud API), (6) `queue-dispatch-agent`'s
-overflow judgment call plus `wash-concierge`, the customer-facing WhatsApp chat agent, and
+8-step build order; **steps 1–5, the two highest-leverage agents from step 6, the CRM
+Ticket entity from step 7, and a real accounting ledger, are built and live** as an
+additive module alongside the existing booking-based app — (1) the data model + primary
+wash lifecycle, (2) role-based UI, (3) RBAC (folded into the Phase 2 work), (4) the
+lifecycle's automations, (5) the two integrations the primary lifecycle needs (Stripe,
+WhatsApp Cloud API), (6) `queue-dispatch-agent`'s
+overflow judgment call plus `wash-concierge`, the customer-facing WhatsApp chat agent,
 (7) a real support-ticket system with SLAs that gives `wash-concierge`'s escalations
-somewhere to be tracked to resolution. All of Stripe, WhatsApp, and the AI agents are
-**credential-gated**: this session has none of the underlying real accounts, so each
-feature runs in a graceful fallback mode until real keys are added to `server/.env` —
-nothing crashes or silently pretends to work without them. The rest of step 6, the
-wash-sensor/IoT platform, and the growth/finance/HR clusters are still ahead — see
-"Not built yet" below.
+somewhere to be tracked to resolution, and a real double-entry accounting ledger
+(`carwash-compile/05-finance/accounting.md`) that auto-posts from checkout, membership
+billing, and expenses. All of Stripe, WhatsApp, and the AI agents are **credential-gated**:
+this session has none of the underlying real accounts, so each feature runs in a graceful
+fallback mode until real keys are added to `server/.env` — nothing crashes or silently
+pretends to work without them. The rest of step 6, the wash-sensor/IoT platform, and the
+growth/HR clusters are still ahead — see "Not built yet" below.
 
 - **Data model**: `WashPackage` (+ 3-tier `PackagePricing`), `ServiceBay`, `WashOrder` — see
   `carwash-compile/01-foundation/data-model.md` for the source spec.
@@ -267,14 +271,46 @@ wash-sensor/IoT platform, and the growth/finance/HR clusters are still ahead —
     skip it — no real inbound-lead volume to justify it yet) and a unified omni-channel
     thread linking WhatsApp/email/in-app messages onto one ticket (comments today are
     staff-authored or system-generated only).
+- **Finance & accounting** (`carwash-compile/05-finance/accounting.md`, `server/src/services/ledgerService.js`)
+  — a real double-entry general ledger: the spec's own 21-account chart, seeded once at
+  deploy time, and immutable `JournalEntry`/`JournalLine` rows every one of which traces
+  back (`sourceEntity`/`sourceId`) to the `WashOrder`, `MembershipSubscription`, or expense
+  that generated it. `postEntry()` refuses to write an unbalanced entry — a bug in a posting
+  function fails loudly instead of quietly corrupting the books.
+  - **Auto-posting**, per the spec's own "no manual bookkeeping for routine transactions"
+    rule — wired into the three workflow steps this app actually has that move money:
+    `WashOrder` checkout (cash/card debits `1000 Cash`, `fleet-invoice` debits
+    `1100 Accounts Receivable - Fleet` instead — the spec's own account split; a
+    membership-paid visit posts nothing new, since that revenue was already recognized when
+    the subscription was charged), a successful membership charge (Stripe's
+    `invoice.payment_succeeded`, using the invoice's actual `amount_paid` — accurate through
+    proration — or the local demo-mode signup simulating one), and this app's pre-existing
+    `Expense` entity (not in the spec, but the natural expense side of the same ledger —
+    each category maps onto one of the spec's expense accounts). Sales tax is backed out of
+    `WashOrder.price` as a tax-inclusive total at a configurable `SALES_TAX_RATE` (default
+    5%, matching this app's existing legacy-booking rate) — the spec has no separate tax
+    field to read instead.
+  - **Never mutates a posted entry** — deleting an expense posts a reversing entry instead
+    (the spec's own period-close posture: "lock the period from further edits"). Editing an
+    already-posted expense's amount/category does *not* currently re-post a correction — a
+    documented simplification, not a silent one.
+  - `/finance` (admin/manager) — a date-ranged P&L (revenue/expense by account, net income),
+    the full chart of accounts with live balances, and a readable journal.
+  - **Not built**, per the spec's own text: payroll posting (needs `03-operations/hr.md`,
+    not built) and `PurchaseOrder` receiving (needs an inventory module, not built) — the
+    spec's other two auto-posting triggers; refunds (this app's cancel-wash-order flow only
+    allows cancelling *before* payment is ever collected, so there's no charge yet to
+    reverse); the loyalty-points liability accrual (`2200`/`5600` exist in the chart of
+    accounts, but this app has no defined dollar redemption value per point to post against);
+    multi-currency (N/A — spec says so too); budgets and budget-vs-actual variance; and the
+    weekly Stripe-payout bank reconciliation workflow.
 - **Not built yet** (later phases per the spec's own build order): the rest of the AI agent
   roster (`membership-billing-agent`, `predictive-maintenance-agent` — needs IoT telemetry —
   and the other 8); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and proactive
-  SLA-breach alerting (need a scheduler this app doesn't run yet); social/marketing; the
-  accounting ledger; and HR/payroll — and RBAC only covers this app's existing
-  admin/manager/staff roles, not the spec's full 7-role breakdown (Owner/Site Manager/Bay
-  Attendant/Wash Technician/Detail Technician/Cashier/Fleet Account Manager), which would
-  need its own `Employee` entity.
+  SLA-breach alerting (need a scheduler this app doesn't run yet); social/marketing; and
+  HR/payroll — and RBAC only covers this app's existing admin/manager/staff roles, not the
+  spec's full 7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
+  Technician/Cashier/Fleet Account Manager), which would need its own `Employee` entity.
 
 ## Responsiveness
 

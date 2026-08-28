@@ -7,6 +7,7 @@ const { db } = require('../config/db');
 const { membershipSubscriptions } = require('../db/schema');
 const { getStripe, isStripeConfigured, isWebhookConfigured } = require('../config/stripe');
 const { membershipPaymentFailedDunning, sendMembershipWelcome } = require('../utils/automations');
+const { postMembershipCharge } = require('../services/ledgerService');
 
 const nextMonth = (from = new Date()) => {
   const d = new Date(from);
@@ -70,6 +71,15 @@ const handlePaymentSucceeded = async (invoice) => {
       updatedAt: new Date(),
     })
     .where(eq(membershipSubscriptions._id, sub._id));
+
+  // Auto-posting rule (05-finance/accounting.md) — posted here rather than on
+  // checkout.session.completed above so a brand-new subscription's first charge is only
+  // posted once: Stripe fires invoice.payment_succeeded for that first invoice too, and this
+  // event carries the actual amount charged (invoice.amount_paid), not just the plan's
+  // sticker price — accurate through proration, coupons, etc.
+  postMembershipCharge(sub, invoice.amount_paid / 100, `Membership charge (invoice ${invoice.id})`).catch((err) =>
+    console.error('[ledger] membership charge post failed:', err.message)
+  );
 };
 
 const handleSubscriptionDeleted = async (stripeSubscription) => {

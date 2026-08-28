@@ -353,6 +353,53 @@ const ticketComments = pgTable('ticket_comments', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// --- Finance & accounting ledger (carwash-compile/05-finance/accounting.md). "A native
+// ledger, sized for a single-location business (21 accounts) but real double-entry
+// throughout - every dollar in the P&L traces to a JournalEntry referencing the WashOrder,
+// MembershipSubscription, or [Expense] that generated it." Scoped to the spec's own
+// auto-posting triggers that this app actually has a workflow for: WashOrder checkout and a
+// successful membership charge, plus this app's pre-existing Expense entity (not in the
+// spec, but the natural expense side of the same ledger). Not built, documented at each
+// call site: payroll (needs 03-operations/hr.md, not built), PurchaseOrder receiving (needs
+// an inventory module, not built), and refunds (this app's cancel-wash-order flow only
+// allows cancelling before payment is ever collected, so there is no charge to reverse).
+//
+// Accounts are keyed by the spec's own numeric code (a stable natural key, not a surrogate
+// uuid) since the chart of accounts is a small, seeded, effectively-static reference table.
+const ledgerAccounts = pgTable('ledger_accounts', {
+  code: text('code').primaryKey(),
+  name: text('name').notNull(),
+  // type: asset | liability | equity | revenue | expense
+  type: text('type').notNull(),
+  active: boolean('active').notNull().default(true),
+});
+
+// One JournalEntry per real-world transaction; its JournalLines must balance (sum(debit) ===
+// sum(credit)) — enforced in ledgerService.postEntry, the only way entries get created.
+// sourceEntity/sourceId link back to whatever business event generated it (the spec's own
+// "every JournalEntry carries sourceEntity/sourceId back to the transaction that created
+// it"), but isn't a DB foreign key — the three source tables don't share a namespace.
+const journalEntries = pgTable('journal_entries', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  memo: text('memo').notNull(),
+  // sourceEntity: wash_order | membership_subscription | expense
+  sourceEntity: text('source_entity').notNull(),
+  sourceId: uuid('source_id'),
+  postedAt: timestamp('posted_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+const journalLines = pgTable('journal_lines', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  entry: uuid('entry_id')
+    .notNull()
+    .references(() => journalEntries._id, { onDelete: 'cascade' }),
+  account: text('account_code')
+    .notNull()
+    .references(() => ledgerAccounts.code, { onDelete: 'restrict' }),
+  debit: doublePrecision('debit').notNull().default(0),
+  credit: doublePrecision('credit').notNull().default(0),
+});
+
 module.exports = {
   users,
   customers,
@@ -372,4 +419,7 @@ module.exports = {
   agentConversations,
   tickets,
   ticketComments,
+  ledgerAccounts,
+  journalEntries,
+  journalLines,
 };

@@ -17,6 +17,7 @@ import Vehicles from './pages/Vehicles'
 import Services from './pages/Services'
 import Staff from './pages/Staff'
 import Expenses from './pages/Expenses'
+import Finance from './pages/Finance'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
@@ -49,6 +50,7 @@ function App() {
               <Route path="/concierge" element={<Concierge />} />
               <Route path="/staff" element={<Staff />} />
               <Route path="/expenses" element={<Expenses />} />
+              <Route path="/finance" element={<Finance />} />
               <Route path="/reports" element={<Reports />} />
             </Route>
           </Route>

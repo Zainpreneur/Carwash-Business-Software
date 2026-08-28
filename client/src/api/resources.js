@@ -60,6 +60,12 @@ export const conciergeApi = {
   simulate: (fromPhone, text) => apiClient.post('/concierge/simulate', { fromPhone, text }).then((r) => r.data),
 }
 
+export const ledgerApi = {
+  accounts: () => apiClient.get('/ledger/accounts').then((r) => r.data),
+  entries: (params) => apiClient.get('/ledger/entries', { params }).then((r) => r.data),
+  pnl: (params) => apiClient.get('/ledger/pnl', { params }).then((r) => r.data),
+}
+
 export const ticketsApi = {
   list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
   get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),
