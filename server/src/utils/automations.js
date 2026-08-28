@@ -19,6 +19,7 @@ const {
   membershipPlans,
 } = require('../db/schema');
 const { notifyRoles } = require('./notify');
+const { recommendOverflowAction } = require('../agents/queueDispatchAgent');
 const { findOpenBay } = require('./bays');
 const { sendWhatsAppTemplate } = require('./whatsapp');
 
@@ -117,12 +118,29 @@ const checkQueueWaitAlert = async (actorUserId) => {
     .where(and(eq(notifications.type, 'queue_wait_alert'), gte(notifications.createdAt, fifteenMinAgo)));
   if (Number(recentCount) > 0) return;
 
+  // The spec's own escalation guardrail is specifically ">25 min predicted wait" (a deeper
+  // backup than the >20 min alert threshold above) — that's where queue-dispatch-agent's
+  // overflow judgment call earns its keep instead of a fixed message. The 15-minute dedup
+  // above stands in for the spec's "3 consecutive vehicles" condition — in practice a
+  // sustained backup keeps re-triggering past that window, a transient one doesn't.
+  let recommendation = `${queueLength} vehicles queued — predicted wait ~${predictedWaitMinutes} min. Consider overflow staffing.`;
+  if (predictedWaitMinutes > 25) {
+    const result = await recommendOverflowAction({
+      queueLength,
+      predictedWaitMinutes,
+      bayCount,
+      timeOfDay: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+    });
+    const tag = result.source === 'ai-agent' ? '[queue-dispatch-agent]' : '[auto]';
+    recommendation = `${queueLength} vehicles queued — predicted wait ~${predictedWaitMinutes} min. ${tag} ${result.text}`;
+  }
+
   await notifyRoles(
     ['admin', 'manager'],
     {
       type: 'queue_wait_alert',
       title: 'Queue backing up',
-      message: `${queueLength} vehicles queued — predicted wait ~${predictedWaitMinutes} min. Consider overflow staffing.`,
+      message: recommendation,
     },
     actorUserId
   );
