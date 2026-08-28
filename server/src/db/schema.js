@@ -287,6 +287,22 @@ const membershipSubscriptions = pgTable('membership_subscriptions', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// wash-concierge's per-customer conversation memory (02-intelligence/ai-agents.md: "per-
+// customer conversation history retained 90 days, so a repeat question isn't answered from
+// scratch"). Keyed by phone rather than requiring a matched Customer row — an inbound
+// WhatsApp message may come from a number not yet on file.
+const agentConversations = pgTable('agent_conversations', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  phone: text('phone').notNull(),
+  customer: uuid('customer_id').references(() => customers._id, { onDelete: 'set null' }),
+  // role: user | assistant
+  role: text('role').notNull(),
+  content: text('content').notNull(),
+  // which tool(s) this turn invoked, if any — audit trail for what the agent actually did.
+  toolCalls: jsonb('tool_calls'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -303,4 +319,5 @@ module.exports = {
   customerMessages,
   membershipPlans,
   membershipSubscriptions,
+  agentConversations,
 };

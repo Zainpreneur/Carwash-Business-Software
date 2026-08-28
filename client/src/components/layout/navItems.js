@@ -12,6 +12,7 @@ import {
   ListOrdered,
   LogOut,
   Users2,
+  Bot,
 } from 'lucide-react'
 
 // Role-based wash-floor views (carwash-compile/01-foundation/dashboards.md):
@@ -24,6 +25,7 @@ export const navItems = [
   { to: '/checkout', label: 'Checkout', icon: LogOut, roles: ['admin', 'manager', 'staff'] },
   { to: '/wash-queue', label: 'Wash Ops', icon: Waves, roles: ['admin', 'manager'] },
   { to: '/memberships', label: 'Memberships', icon: Users2, roles: ['admin', 'manager'] },
+  { to: '/concierge', label: 'Concierge', icon: Bot, roles: ['admin', 'manager'] },
   { to: '/bookings', label: 'Bookings', icon: CalendarClock, roles: ['admin', 'manager', 'staff'] },
   { to: '/customers', label: 'Customers', icon: Users, roles: ['admin', 'manager', 'staff'] },
   { to: '/vehicles', label: 'Vehicles', icon: Car, roles: ['admin', 'manager', 'staff'] },
