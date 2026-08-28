@@ -39,6 +39,15 @@ const customers = pgTable('customers', {
   // set once a Stripe Customer exists for this customer (membership billing only —
   // never created for a plain pay-per-wash visit).
   stripeCustomerId: text('stripe_customer_id'),
+  // fleet-lead-scorer's own segment key (04-growth/marketing.md's "Fleet/Commercial"
+  // segment) — set manually by staff, or automatically once a fleet inquiry scores high
+  // enough (see fleetInquiries below); no automatic detection from wash volume alone.
+  isFleetAccount: boolean('is_fleet_account').notNull().default(false),
+  // Referral program (04-growth/marketing.md): every customer gets a stable referralCode
+  // once generated; referredByCode records whose code got them in the door, checked once
+  // against washOrderController.checkout's first-completed-order crediting logic.
+  referralCode: text('referral_code').unique(),
+  referredByCode: text('referred_by_code'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -653,6 +662,60 @@ const strategyRecommendations = pgTable('strategy_recommendations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// --- Growth cluster (04-growth/marketing.md, 04-growth/social-media.md) — the two task
+// agents from the spec's own roster that are buildable against real (if manually-entered)
+// data rather than a live ad-platform or Google Business Profile connector this app has no
+// credentials for. The rest of the growth cluster (paid ad campaigns, A/B testing, the
+// content-calendar/SocialPost publishing pipeline, multi-week lifecycle drip follow-ups —
+// all of which genuinely need a scheduler or a real ad/social API this app doesn't have) is
+// documented as not built rather than faked.
+//
+// fleet-lead-scorer: "scores an inbound commercial/fleet inquiry ... creates a follow-up
+// notification for fleet-account-manager, rather than running a full sales pipeline" (the
+// spec's own reasoning for skipping the pipeline — see 04-growth/crm.md — doesn't apply to
+// this lightweight scorer). Makes NO Claude call: scoring from three stated inputs against
+// stated thresholds is arithmetic, not a judgment call, the same reasoning that kept
+// membership-billing-agent/inventory-forecaster LLM-free.
+const fleetInquiries = pgTable('fleet_inquiries', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  customer: uuid('customer_id').references(() => customers._id, { onDelete: 'set null' }),
+  companyName: text('company_name').notNull(),
+  contactPhone: text('contact_phone'),
+  vehicleCountRequested: integer('vehicle_count_requested').notNull(),
+  // contactPattern: business-hours | after-hours — one of the spec's own stated scoring inputs.
+  contactPattern: text('contact_pattern').notNull().default('business-hours'),
+  invoicingTermsRequested: boolean('invoicing_terms_requested').notNull().default(false),
+  score: integer('score').notNull(),
+  // status: new | followed-up | converted | declined
+  status: text('status').notNull().default('new'),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// review-response-agent: "monitors Google Business Profile and social mentions, auto-thanks
+// simple positive reviews with a loyalty-point offer, and opens a Ticket + immediate
+// site-manager alert for anything negative or mentioning damage." The monitoring/detection
+// half isn't built (no Google Business Profile/social API connector) — reviews are logged
+// here manually (by staff, or a future webhook), and the response logic downstream of that
+// is real. Also makes NO Claude call: the guardrail itself is a rating threshold plus a
+// keyword check, not free-form sentiment judgment — deliberately conservative and
+// deterministic rather than trusting an LLM's read of "does this mention damage" for a
+// reputational-risk decision this spec calls out as high-stakes.
+const reviews = pgTable('reviews', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  customer: uuid('customer_id').references(() => customers._id, { onDelete: 'set null' }),
+  // source: google-business-profile | instagram | facebook | tiktok | manual
+  source: text('source').notNull().default('manual'),
+  rating: integer('rating').notNull(),
+  text: text('text'),
+  // status: auto-responded | escalated
+  status: text('status').notNull(),
+  response: text('response'),
+  ticket: uuid('ticket_id').references(() => tickets._id, { onDelete: 'set null' }),
+  loggedBy: uuid('logged_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -688,4 +751,6 @@ module.exports = {
   stockAdjustments,
   agentMetrics,
   strategyRecommendations,
+  fleetInquiries,
+  reviews,
 };

@@ -5,6 +5,7 @@ const { washOrders, customers, vehicles, washPackages, serviceBays, users, custo
 const { notifyRoles } = require('../utils/notify');
 const { findOpenBay } = require('../utils/bays');
 const { notifyReadyForPickup, checkQueueWaitAlert } = require('../utils/automations');
+const { newCustomerWelcomeDayZero, creditReferralIfFirstWash } = require('../utils/growthAutomations');
 const { postWashOrderCheckout } = require('../services/ledgerService');
 
 // wash-a-vehicle state machine (carwash-compile/01-foundation/data-model.md), kebab-cased
@@ -359,7 +360,10 @@ const checkout = asyncHandler(async (req, res) => {
   await db.update(vehicles).set({ lastWashAt: new Date(), updatedAt: new Date() }).where(eq(vehicles._id, order.vehicle));
 
   if (order.customer) {
-    await db
+    const [customerBefore] = await db.select().from(customers).where(eq(customers._id, order.customer));
+    const isFirstEverWash = customerBefore?.visitCount === 0;
+
+    const [updatedCustomer] = await db
       .update(customers)
       .set({
         totalSpent: sql`${customers.totalSpent} + ${order.price}`,
@@ -367,7 +371,15 @@ const checkout = asyncHandler(async (req, res) => {
         loyaltyPoints: sql`${customers.loyaltyPoints} + ${Math.floor(order.price / 10)}`,
         updatedAt: new Date(),
       })
-      .where(eq(customers._id, order.customer));
+      .where(eq(customers._id, order.customer))
+      .returning();
+
+    // new-customer-welcome day 0 + referral crediting (04-growth/marketing.md) — both key
+    // off this being the customer's first-ever completed wash.
+    if (isFirstEverWash && updatedCustomer) {
+      newCustomerWelcomeDayZero(updatedCustomer, order).catch((err) => console.error('[growth] new-customer-welcome failed:', err.message));
+      creditReferralIfFirstWash(updatedCustomer).catch((err) => console.error('[growth] referral credit failed:', err.message));
+    }
   }
 
   notifyRoles(

@@ -248,4 +248,5 @@ module.exports = {
   membershipSuspended,
   membershipCancelledForNonPayment,
   sendMembershipWelcome,
+  sendAndLog,
 };

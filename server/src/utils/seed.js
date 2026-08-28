@@ -31,6 +31,8 @@ const { postWashOrderCheckout, postMembershipCharge, postExpense } = require('..
 const { runPayroll } = require('../services/payrollService');
 const { receivePurchaseOrder, closePurchaseOrder, postStockAdjustment } = require('../services/inventoryService');
 const { createPurchaseOrdersFromRecommendations } = require('../agents/inventoryForecasterAgent');
+const { createInquiry } = require('../agents/fleetLeadScorer');
+const { logReview } = require('../agents/reviewResponseAgent');
 
 const servicesSeed = [
   { name: 'Express Wash', category: 'basic', price: 15, durationMinutes: 20, description: 'Quick exterior rinse & dry' },
@@ -51,7 +53,7 @@ const run = async () => {
   console.log('Seeding database...');
 
   await pool.query(
-    'TRUNCATE agent_metrics, strategy_recommendations, stock_adjustments, purchase_order_lines, purchase_orders, package_supply_usage, supplies, suppliers, payroll_lines, payroll_runs, leave_requests, shifts, employees, journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
+    'TRUNCATE reviews, fleet_inquiries, agent_metrics, strategy_recommendations, stock_adjustments, purchase_order_lines, purchase_orders, package_supply_usage, supplies, suppliers, payroll_lines, payroll_runs, leave_requests, shifts, employees, journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
   );
 
   // --- Chart of accounts (05-finance/accounting.md) — seeded once, up front, since every
@@ -105,6 +107,11 @@ const run = async () => {
     'Lucas White', 'Mia Harris', 'Benjamin Clark', 'Charlotte Lewis', 'Henry Walker',
   ];
 
+  // Referral program (04-growth/marketing.md) — every customer gets a stable referralCode;
+  // Liam Johnson (index 2) is seeded as referred by James Wilson (index 0) to demonstrate
+  // the relationship, and Isabella Thomas (index 9) is a fleet account for the
+  // Fleet/Commercial segment.
+  const referralCodeFor = (name) => `${name.replace(/[^a-zA-Z]/g, '').slice(0, 6).toUpperCase()}-SEED`;
   const createdCustomers = await db
     .insert(customers)
     .values(
@@ -115,6 +122,9 @@ const run = async () => {
         address: `${100 + i} Main St, Springfield`,
         loyaltyPoints: Math.floor(Math.random() * 200),
         whatsappOptIn: i % 4 !== 0, // a few opted-out customers to exercise the automation gate
+        referralCode: referralCodeFor(name),
+        referredByCode: i === 2 ? referralCodeFor(customerNames[0]) : undefined,
+        isFleetAccount: i === 9,
       }))
     )
     .returning();
@@ -495,6 +505,27 @@ const run = async () => {
       body: 'Status changed: in-progress → resolved',
     },
   ]);
+
+  // --- Growth cluster (04-growth/marketing.md demo data) ---
+  await createInquiry({
+    companyName: 'Springfield Delivery Co.',
+    contactPhone: '555-0700',
+    vehicleCountRequested: 12,
+    contactPattern: 'business-hours',
+    invoicingTermsRequested: true,
+    createdBy: admin._id,
+  }); // scores hot — demonstrates the >=50 auto-flag threshold
+  await createInquiry({
+    companyName: 'Miller Landscaping',
+    contactPhone: '555-0701',
+    vehicleCountRequested: 3,
+    contactPattern: 'after-hours',
+    invoicingTermsRequested: false,
+    createdBy: admin._id,
+  }); // scores well under the hot-lead threshold
+
+  await logReview({ customer: createdCustomers[3]._id, source: 'google-business-profile', rating: 5, text: 'Fast, friendly, and my car looks brand new every time!', loggedBy: admin._id });
+  await logReview({ customer: createdCustomers[4]._id, source: 'google-business-profile', rating: 2, text: 'There was a scratch on my bumper after the wash that wasn\'t there before.', loggedBy: admin._id });
 
   console.log('Seed complete!');
   console.log('---------------------------------');

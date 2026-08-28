@@ -136,6 +136,20 @@ export const agentOpsApi = {
   systemHealthReport: () => apiClient.get('/agent-ops/system-health-report').then((r) => r.data),
 }
 
+export const growthApi = {
+  segmentSummary: () => apiClient.get('/growth/segments/summary').then((r) => r.data),
+  segmentedCustomers: (segment) => apiClient.get('/growth/segments/customers', { params: { segment } }).then((r) => r.data),
+  fleetInquiries: {
+    list: () => apiClient.get('/growth/fleet-inquiries').then((r) => r.data),
+    create: (data) => apiClient.post('/growth/fleet-inquiries', data).then((r) => r.data),
+    updateStatus: (id, status) => apiClient.patch(`/growth/fleet-inquiries/${id}/status`, { status }).then((r) => r.data),
+  },
+  reviews: {
+    list: () => apiClient.get('/growth/reviews').then((r) => r.data),
+    create: (data) => apiClient.post('/growth/reviews', data).then((r) => r.data),
+  },
+}
+
 export const ticketsApi = {
   list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
   get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),
