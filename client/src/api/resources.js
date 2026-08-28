@@ -120,6 +120,15 @@ export const inventoryApi = {
   },
 }
 
+export const simulationApi = {
+  bayThroughput: () => apiClient.get('/simulations/bay-throughput').then((r) => r.data),
+  demandForecast: () => apiClient.get('/simulations/demand-forecast').then((r) => r.data),
+  staffingCapacity: () => apiClient.get('/simulations/staffing-capacity').then((r) => r.data),
+  membershipEconomics: () => apiClient.get('/simulations/membership-economics').then((r) => r.data),
+  cashFlowForecast: (weeks) => apiClient.get('/simulations/cash-flow-forecast', { params: { weeks } }).then((r) => r.data),
+  pricingScenario: (data) => apiClient.post('/simulations/pricing-scenario', data).then((r) => r.data),
+}
+
 export const ticketsApi = {
   list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
   get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),

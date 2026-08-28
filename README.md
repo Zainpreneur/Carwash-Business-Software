@@ -137,6 +137,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Membership plans | `GET/POST /membership-plans`, `GET/PUT/DELETE /membership-plans/:id` |
 | Membership subscriptions | `GET/POST /membership-subscriptions`, `PATCH /membership-subscriptions/:id/{pause,resume,mark-paid,cancel}` |
 | Inventory | `GET/POST /inventory/supplies`, `PUT/DELETE /inventory/supplies/:id`, `GET/POST /inventory/adjustments`, `GET/POST /inventory/purchase-orders`, `GET /inventory/purchase-orders/:id`, `PATCH /inventory/purchase-orders/:id/{approve,receive,close}`, `GET /inventory/forecast`, `POST /inventory/forecast/run` (admin/manager) |
+| Simulations | `GET /simulations/{bay-throughput,demand-forecast,staffing-capacity,membership-economics,cash-flow-forecast}`, `POST /simulations/pricing-scenario` (admin/manager) |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -145,13 +146,12 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
 | HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision`, `GET/POST /hr/payroll-runs`, `GET /hr/payroll-runs/:id` (admin/manager) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
-8-step build order; **steps 1–5, four of step 6's agents, the CRM Ticket entity from step
-7, a real accounting ledger, HR & payroll, and inventory & purchasing are built and live**
-as an additive module alongside the existing booking-based app — (1) the data model +
+8-step build order; **all 8 steps have something real and live**, though step 6 (the AI
+agent roster) and step 7 (growth/CRM) are each partial — (1) the data model +
 primary wash lifecycle, (2) role-based UI, (3) RBAC (folded into the Phase 2 work), (4) the
 lifecycle's automations, (5) the two integrations the primary lifecycle needs (Stripe,
 WhatsApp Cloud API), (6) `queue-dispatch-agent`'s overflow judgment call, `wash-concierge`
@@ -164,7 +164,11 @@ from checkout, membership billing, expenses, payroll, and purchasing, a real sta
 with scheduling, leave, and a payroll run that posts to that same ledger
 (`carwash-compile/03-operations/hr.md`), and a real inventory/purchasing module
 (`carwash-compile/03-operations/inventory.md`) that closes the ledger's own previously-dead
-`1400`/`2000`/`5700` accounts. All of Stripe,
+`1400`/`2000`/`5700` accounts, and (8) five of `02-intelligence/simulation.md`'s seven
+forecasting models (`carwash-compile/02-intelligence/simulation.md`) — bay-throughput,
+demand, staffing-capacity, membership-economics, and cash-flow — computed live from real
+data with every stated assumption labeled, per the spec's own "ship it with clearly-labeled
+industry-benchmark defaults from day one" guidance for this exact step. All of Stripe,
 WhatsApp, and the AI agents are **credential-gated**: this session has none of the
 underlying real accounts, so each feature runs in a graceful fallback mode until real keys
 are added to `server/.env` — nothing crashes or silently
@@ -386,6 +390,43 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
   - **Not built**: multi-warehouse stock transfers (the spec's own `stockTransfers: false`
     says skip it), and a `fleet-account-manager` bonus tie-in (`Customer.isFleetAccount`
     doesn't exist in this app's `Customer` model).
+- **Simulation & forecasting** (`carwash-compile/02-intelligence/simulation.md`,
+  `server/src/services/simulationService.js`) — build-order step 8, the last one. Five of
+  the spec's seven models, all **pure, stateless computations over data this app already
+  has** — nothing is persisted, the same "compute live, don't push" posture as ticket SLA
+  risk and shift no-show flags. Every stated assumption (variable-cost components, service
+  rates, price elasticity) is a named, editable constant in one place, and every number in
+  every API response carries a `dataSource: 'observed' | 'industry-benchmark'` label — the
+  spec's own "Calibration and honesty" rule that a founder "needs to know how much to trust
+  the number."
+  - **bay-throughput-queue-simulator** and **membership-economics-simulator** — the spec's
+    own "two that matter most... get the deepest treatment" — are both fully built.
+    Bay-throughput reads real `ServiceBay.avgThroughputPerHour` and recent `WashOrder` queue
+    volume by lane to flag a structurally-undersized bay/hour combination. Membership
+    economics computes a real variable-cost-per-wash from actual `Employee` wage data (not
+    just the spec's own worked-example constants) and each plan's real
+    `washesThisCycle`/cancellation history once there's enough of it, falling back to the
+    spec's own industry-benchmark distribution (median 3.2 washes/month, ~14-month tenure)
+    until then — exactly the "ship with labeled defaults from day one" the spec calls for.
+  - **demand-forecast**: a real day-of-week/hour-of-day curve from `WashOrder` history once
+    ~8 weeks exist; an industry-benchmark-shaped curve, clearly labeled, before that (this
+    session's own seed data is all "today," so it always shows the benchmark path — a good
+    live demonstration of the fallback, not a bug). **Not built**: the spec's own
+    `weather-api` rain/pollen overlay (no weather integration exists).
+  - **staffing-capacity-simulator** ties the demand forecast against real `Shift` coverage
+    (from the HR phase) to flag understaffed hour/day combinations, at stated
+    vehicles-per-hour service-rate assumptions per role.
+  - **cash-flow-forecast** projects a weekly grid from real membership MRR, demand-derived
+    pay-per-wash revenue, and real trailing payroll/purchase-order/expense outflow (from the
+    finance, HR, and inventory phases) — flags any week the running balance would go
+    negative.
+  - **pricing-scenario-simulator** is interactive on `/simulations`: pick a plan, a price
+    change %, and an elasticity assumption (default -0.3, the spec's own "10% price increase
+    costs ~3% of the member base"), see the projected member-count/revenue/margin delta
+    live.
+  - **Not built**: **downtime-cost-simulator** — its own inputs (`Asset.status = 'down'`
+    windows) come from `03-operations/assets-iot.md`, which needs an Asset/IoT entity this
+    app doesn't have, so there's nothing to compute it from yet.
 - **Not built yet** (later phases per the spec's own build order): the rest of the AI agent
   roster (`predictive-maintenance-agent` and `quality-anomaly-detector` — need IoT telemetry
   this app has no sensors for; `review-response-agent`, `phone-line-agent`,

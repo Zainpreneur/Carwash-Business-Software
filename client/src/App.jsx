@@ -21,6 +21,7 @@ import Inventory from './pages/Inventory'
 import Expenses from './pages/Expenses'
 import Finance from './pages/Finance'
 import Reports from './pages/Reports'
+import Simulations from './pages/Simulations'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
 
@@ -56,6 +57,7 @@ function App() {
               <Route path="/expenses" element={<Expenses />} />
               <Route path="/finance" element={<Finance />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/simulations" element={<Simulations />} />
             </Route>
           </Route>
         </Route>
