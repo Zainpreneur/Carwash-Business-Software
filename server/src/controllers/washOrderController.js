@@ -149,6 +149,7 @@ const getCustomerMessages = asyncHandler(async (req, res) => {
       template: customerMessages.template,
       automation: customerMessages.automation,
       status: customerMessages.status,
+      error: customerMessages.error,
       createdAt: customerMessages.createdAt,
     })
     .from(customerMessages)

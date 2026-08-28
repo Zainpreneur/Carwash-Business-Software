@@ -15,6 +15,10 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const washOrderRoutes = require('./routes/washOrderRoutes');
 const washPackageRoutes = require('./routes/washPackageRoutes');
 const serviceBayRoutes = require('./routes/serviceBayRoutes');
+const membershipPlanRoutes = require('./routes/membershipPlanRoutes');
+const membershipSubscriptionRoutes = require('./routes/membershipSubscriptionRoutes');
+const integrationRoutes = require('./routes/integrationRoutes');
+const { handleStripeWebhook } = require('./controllers/stripeWebhookController');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -26,6 +30,12 @@ app.use(
     credentials: true,
   })
 );
+
+// Stripe webhook needs the exact raw request bytes to verify its signature — must be
+// registered before the global express.json() body parser below, and unauthenticated
+// (Stripe, not a logged-in user, calls this; the signature check is the auth).
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), handleStripeWebhook);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV !== 'test') {
@@ -46,6 +56,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/wash-orders', washOrderRoutes);
 app.use('/api/wash-packages', washPackageRoutes);
 app.use('/api/service-bays', serviceBayRoutes);
+app.use('/api/membership-plans', membershipPlanRoutes);
+app.use('/api/membership-subscriptions', membershipSubscriptionRoutes);
+app.use('/api/integrations', integrationRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

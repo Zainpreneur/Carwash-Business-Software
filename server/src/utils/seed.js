@@ -13,6 +13,8 @@ const {
   packagePricing,
   serviceBays,
   washOrders,
+  membershipPlans,
+  membershipSubscriptions,
 } = require('../db/schema');
 
 const servicesSeed = [
@@ -34,7 +36,7 @@ const run = async () => {
   console.log('Seeding database...');
 
   await pool.query(
-    'TRUNCATE customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
+    'TRUNCATE membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
   );
 
   const insertedUsers = await db
@@ -234,6 +236,27 @@ const run = async () => {
     wo(10, { packageIdx: 0, package: createdPackages[0]._id, status: 'cancelled', queuePosition: 10, queuedAt: woDate(7, 0) }),
   ];
   await db.insert(washOrders).values(washOrderSeed.map(({ packageIdx, ...row }) => row));
+
+  // --- Membership billing (Phase 5 demo data) ---
+  // No STRIPE_SECRET_KEY at seed time, so these have no stripePriceId — createPlan/updatePlan
+  // will backfill one automatically the next time each plan is saved with Stripe connected.
+  const membershipPlanSeed = [
+    { tier: 'basic-unlimited', name: 'Basic Unlimited', coveredPackage: createdPackages[0]._id, monthlyPrice: 29, isUnlimited: true, rolloverAllowed: false },
+    { tier: 'premium-unlimited', name: 'Premium Unlimited', coveredPackage: createdPackages[1]._id, monthlyPrice: 49, isUnlimited: true, rolloverAllowed: true },
+    { tier: 'fleet-unlimited', name: 'Fleet Unlimited', coveredPackage: createdPackages[2]._id, monthlyPrice: 199, isUnlimited: true, washesPerMonthCap: 20, rolloverAllowed: false },
+  ];
+  const createdPlans = await db.insert(membershipPlans).values(membershipPlanSeed).returning();
+
+  const memberVehicle = createdVehicles[1];
+  await db.insert(membershipSubscriptions).values({
+    customer: memberVehicle.customer,
+    vehicle: memberVehicle._id,
+    plan: createdPlans[0]._id,
+    billingDayOfMonth: now.getDate(),
+    nextBillingDate: new Date(now.getFullYear(), now.getMonth() + 1, now.getDate()),
+    washesThisCycle: 2,
+    status: 'active',
+  });
 
   console.log('Seed complete!');
   console.log('---------------------------------');
