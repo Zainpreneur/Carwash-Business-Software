@@ -18,8 +18,12 @@ const {
   tickets,
   ticketComments,
   ledgerAccounts,
+  employees,
+  shifts,
+  leaveRequests,
 } = require('../db/schema');
 const { postWashOrderCheckout, postMembershipCharge, postExpense } = require('../services/ledgerService');
+const { runPayroll } = require('../services/payrollService');
 
 const servicesSeed = [
   { name: 'Express Wash', category: 'basic', price: 15, durationMinutes: 20, description: 'Quick exterior rinse & dry' },
@@ -40,7 +44,7 @@ const run = async () => {
   console.log('Seeding database...');
 
   await pool.query(
-    'TRUNCATE journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
+    'TRUNCATE payroll_lines, payroll_runs, leave_requests, shifts, employees, journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
   );
 
   // --- Chart of accounts (05-finance/accounting.md) — seeded once, up front, since every
@@ -268,6 +272,14 @@ const run = async () => {
     wo(8, { packageIdx: 0, package: createdPackages[0]._id, status: 'completed', queuePosition: 8, queuedAt: woDate(7, 40), bayAssignedAt: woDate(7, 42), washStartedAt: woDate(7, 44), washCompletedAt: woDate(7, 52), checkedOutAt: woDate(7, 55), qcResult: 'pass', paymentMethod: 'card' }),
     wo(9, { packageIdx: 1, package: createdPackages[1]._id, status: 'completed', queuePosition: 9, queuedAt: woDate(7, 10), bayAssignedAt: woDate(7, 12), washStartedAt: woDate(7, 14), washCompletedAt: woDate(7, 24), checkedOutAt: woDate(7, 27), qcResult: 'pass', paymentMethod: 'membership' }),
     wo(10, { packageIdx: 0, package: createdPackages[0]._id, status: 'cancelled', queuePosition: 10, queuedAt: woDate(7, 0) }),
+    // Detail-bay, completed, assigned to a detail-technician (Sara Staff — see HR seed data
+    // below) so payroll's commission calc has something to compute in the demo.
+    wo(11, {
+      packageIdx: 3, package: createdPackages[3]._id, status: 'completed', queuePosition: 11,
+      queuedAt: woDate(6, 0), bayAssignedAt: woDate(6, 2), washStartedAt: woDate(6, 5),
+      washCompletedAt: woDate(7, 30), checkedOutAt: woDate(7, 35), qcResult: 'pass',
+      paymentMethod: 'card', assignedTechnician: staffMembers[1]._id,
+    }),
   ];
   const createdWashOrders = await db.insert(washOrders).values(washOrderSeed.map(({ packageIdx, ...row }) => row)).returning();
   for (const order of createdWashOrders) {
@@ -298,6 +310,47 @@ const run = async () => {
     })
     .returning();
   await postMembershipCharge(createdSubscription, membershipPlanSeed[0].monthlyPrice, 'Basic Unlimited membership charge');
+
+  // --- HR & payroll (03-operations/hr.md demo data) ---
+  const employeeSeed = [
+    { user: staffMembers[0]._id, name: staffMembers[0].name, phone: staffMembers[0].phone, position: 'bay-attendant', status: 'active', hireDate: new Date(now.getFullYear() - 1, 2, 10), hourlyRate: 16 },
+    { user: staffMembers[1]._id, name: staffMembers[1].name, phone: staffMembers[1].phone, position: 'detail-technician', status: 'active', hireDate: new Date(now.getFullYear() - 1, 5, 1), hourlyRate: 18, commissionRate: 0.1 },
+    { user: staffMembers[2]._id, name: staffMembers[2].name, phone: staffMembers[2].phone, position: 'cashier', status: 'active', hireDate: new Date(now.getFullYear(), 0, 15), hourlyRate: 15 },
+    { user: insertedUsers[1]._id, name: insertedUsers[1].name, phone: insertedUsers[1].phone, position: 'site-manager', status: 'active', hireDate: new Date(now.getFullYear() - 2, 0, 1), annualSalary: 62000 },
+    // An applicant with no login yet — shows the lifecycle's own point that Employee !=
+    // a users/RBAC row.
+    { name: 'Jordan Lee', phone: '555-0900', position: 'wash-technician', status: 'applicant' },
+  ];
+  const createdEmployees = await db.insert(employees).values(employeeSeed).returning();
+  const [bayAttendantEmp, detailTechEmp, cashierEmp] = createdEmployees;
+
+  const shiftDate = (daysAgo, h, m = 0) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo, h, m);
+  const shiftSeed = [
+    // Completed shifts this pay period — feed payroll's hours calc.
+    { employee: bayAttendantEmp._id, startsAt: shiftDate(2, 7), endsAt: shiftDate(2, 15), status: 'completed', checkedInAt: shiftDate(2, 7, 2), checkedOutAt: shiftDate(2, 15) },
+    { employee: bayAttendantEmp._id, startsAt: shiftDate(1, 7), endsAt: shiftDate(1, 15), status: 'completed', checkedInAt: shiftDate(1, 7), checkedOutAt: shiftDate(1, 15) },
+    { employee: detailTechEmp._id, bay: bayByNumber.get(5)._id, startsAt: shiftDate(2, 8), endsAt: shiftDate(2, 16), status: 'completed', checkedInAt: shiftDate(2, 8), checkedOutAt: shiftDate(2, 16) },
+    { employee: cashierEmp._id, startsAt: shiftDate(1, 9), endsAt: shiftDate(1, 17), status: 'completed', checkedInAt: shiftDate(1, 9), checkedOutAt: shiftDate(1, 17) },
+    // Scheduled but never clocked in and well past start — demonstrates the live-computed
+    // "isLate" flag (shift-no-show-alert's signal) without needing a real scheduler.
+    { employee: cashierEmp._id, startsAt: shiftDate(0, 6), endsAt: shiftDate(0, 14), status: 'scheduled' },
+    // Upcoming, not yet due.
+    { employee: bayAttendantEmp._id, startsAt: new Date(now.getTime() + 20 * 60 * 60 * 1000), endsAt: new Date(now.getTime() + 28 * 60 * 60 * 1000), status: 'scheduled' },
+  ];
+  await db.insert(shifts).values(shiftSeed);
+
+  await db.insert(leaveRequests).values([
+    { employee: cashierEmp._id, startDate: new Date(now.getFullYear(), now.getMonth() + 1, 3), endDate: new Date(now.getFullYear(), now.getMonth() + 1, 5), reason: 'Family trip', status: 'approved', approvedBy: admin._id },
+    { employee: bayAttendantEmp._id, startDate: new Date(now.getFullYear(), now.getMonth() + 1, 10), endDate: new Date(now.getFullYear(), now.getMonth() + 1, 10), reason: 'Doctor appointment', status: 'pending' },
+  ]);
+
+  // One payroll run over the last 14 days — auto-posts to the ledger too (payrollLinked),
+  // so /finance and /hr agree on the same numbers out of the box.
+  await runPayroll({
+    periodStart: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000),
+    periodEnd: now,
+    createdBy: admin._id,
+  });
 
   // --- Support tickets (04-growth/crm.md demo data) ---
   const ticketSeed = [

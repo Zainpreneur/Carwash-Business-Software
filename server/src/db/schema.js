@@ -359,10 +359,10 @@ const ticketComments = pgTable('ticket_comments', {
 // MembershipSubscription, or [Expense] that generated it." Scoped to the spec's own
 // auto-posting triggers that this app actually has a workflow for: WashOrder checkout and a
 // successful membership charge, plus this app's pre-existing Expense entity (not in the
-// spec, but the natural expense side of the same ledger). Not built, documented at each
-// call site: payroll (needs 03-operations/hr.md, not built), PurchaseOrder receiving (needs
-// an inventory module, not built), and refunds (this app's cancel-wash-order flow only
-// allows cancelling before payment is ever collected, so there is no charge to reverse).
+// spec, but the natural expense side of the same ledger). Payroll (below) also posts here
+// now. Not built, documented at each call site: PurchaseOrder receiving (needs an inventory
+// module, not built) and refunds (this app's cancel-wash-order flow only allows cancelling
+// before payment is ever collected, so there is no charge to reverse).
 //
 // Accounts are keyed by the spec's own numeric code (a stable natural key, not a surrogate
 // uuid) since the chart of accounts is a small, seeded, effectively-static reference table.
@@ -382,7 +382,7 @@ const ledgerAccounts = pgTable('ledger_accounts', {
 const journalEntries = pgTable('journal_entries', {
   _id: uuid('_id').primaryKey().defaultRandom(),
   memo: text('memo').notNull(),
-  // sourceEntity: wash_order | membership_subscription | expense
+  // sourceEntity: wash_order | membership_subscription | expense | payroll_run
   sourceEntity: text('source_entity').notNull(),
   sourceId: uuid('source_id'),
   postedAt: timestamp('posted_at', { withTimezone: true }).notNull().defaultNow(),
@@ -398,6 +398,112 @@ const journalLines = pgTable('journal_lines', {
     .references(() => ledgerAccounts.code, { onDelete: 'restrict' }),
   debit: doublePrecision('debit').notNull().default(0),
   credit: doublePrecision('credit').notNull().default(0),
+});
+
+// --- HR & payroll (carwash-compile/03-operations/hr.md). "A real staff roster for a 6-bay
+// site: bay-attendants, wash-technicians, detail-technicians, cashiers, a site-manager, and
+// a part-time fleet-account-manager." Employee is explicitly distinct from the login/RBAC
+// `role` on `users` (see the spec's own note); `employees.user` links the two but is
+// nullable — an Employee record can exist (e.g. an Applicant not yet given a login) without
+// a `users` row, and vice versa (an admin login with no HR record).
+const employees = pgTable('employees', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  user: uuid('user_id').references(() => users._id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  phone: text('phone'),
+  email: text('email'),
+  // position: bay-attendant | wash-technician | detail-technician | cashier | site-manager |
+  // fleet-account-manager — the spec's own compensation table keys off this.
+  position: text('position').notNull(),
+  // status: applicant | hired | onboarding | active | on-leave | offboarded (the spec's
+  // own Employee lifecycle).
+  status: text('status').notNull().default('active'),
+  hireDate: timestamp('hire_date', { withTimezone: true }),
+  // Exactly one of hourlyRate/annualSalary is set, matching the spec's compensation table:
+  // bay-attendant/wash-technician/cashier/fleet-account-manager are hourly, site-manager is
+  // salaried. commissionRate is detail-technician only (10% of PackagePricing.price on
+  // completed detail-bay WashOrders, per the spec's own commission basis).
+  hourlyRate: doublePrecision('hourly_rate'),
+  annualSalary: doublePrecision('annual_salary'),
+  commissionRate: doublePrecision('commission_rate'),
+  emergencyContactName: text('emergency_contact_name'),
+  emergencyContactPhone: text('emergency_contact_phone'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// schedulingEntity: Shift (employeeId x time window x optional bayId), per the spec.
+// checkedInAt/checkedOutAt are this app's own addition — the spec's shift-no-show-alert
+// automation needs *something* to detect a no-show against, and this app has no clock-in
+// hardware/kiosk, so a staff member (or the employee via a future self-service view, not
+// built) marks it here instead.
+const shifts = pgTable('shifts', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  employee: uuid('employee_id')
+    .notNull()
+    .references(() => employees._id, { onDelete: 'cascade' }),
+  bay: uuid('bay_id').references(() => serviceBays._id, { onDelete: 'set null' }),
+  startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+  endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+  // status: scheduled | completed | no-show | cancelled
+  status: text('status').notNull().default('scheduled'),
+  checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
+  checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Leave management: "request -> site-manager approval -> calendar block ... so Shift
+// scheduling automatically respects it". The google-calendar half of that isn't built (no
+// such integration exists in this app); instead shiftController blocks creating a new Shift
+// that overlaps an *approved* leave request directly against this table — same end result
+// for this app's own UI, without a real calendar. The spec's 10-PTO-days/year monthly
+// accrual math isn't computed here either (documented, not silently assumed) — this is a
+// request/approve workflow only.
+const leaveRequests = pgTable('leave_requests', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  employee: uuid('employee_id')
+    .notNull()
+    .references(() => employees._id, { onDelete: 'cascade' }),
+  startDate: timestamp('start_date', { withTimezone: true }).notNull(),
+  endDate: timestamp('end_date', { withTimezone: true }).notNull(),
+  reason: text('reason'),
+  // status: pending | approved | denied
+  status: text('status').notNull().default('pending'),
+  approvedBy: uuid('approved_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Payroll (05-finance/accounting.md's payrollLinked: true / this file's own pipeline:
+// "sum Shift hours + detail-technician commission ... -> post to 5000 Payroll Expense ->
+// disburse via Stripe -> generate pay-stub documents"). A PayrollRun is computed and posted
+// to the ledger in one shot (payrollService.js) — no draft/review step, and immutable once
+// created, the same posture as a JournalEntry. Not built: real Stripe disbursement (this
+// only posts the accounting entry, it never moves real money) and pay-stub document
+// generation (needs 06-platform/knowledge-base.md's document store, not built).
+const payrollRuns = pgTable('payroll_runs', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+  periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+  totalAmount: doublePrecision('total_amount').notNull().default(0),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+const payrollLines = pgTable('payroll_lines', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  payrollRun: uuid('payroll_run_id')
+    .notNull()
+    .references(() => payrollRuns._id, { onDelete: 'cascade' }),
+  employee: uuid('employee_id')
+    .notNull()
+    .references(() => employees._id, { onDelete: 'restrict' }),
+  hoursWorked: doublePrecision('hours_worked').notNull().default(0),
+  hourlyRate: doublePrecision('hourly_rate'),
+  wageAmount: doublePrecision('wage_amount').notNull().default(0),
+  commissionAmount: doublePrecision('commission_amount').notNull().default(0),
+  totalAmount: doublePrecision('total_amount').notNull().default(0),
 });
 
 module.exports = {
@@ -422,4 +528,9 @@ module.exports = {
   ledgerAccounts,
   journalEntries,
   journalLines,
+  employees,
+  shifts,
+  leaveRequests,
+  payrollRuns,
+  payrollLines,
 };

@@ -47,6 +47,18 @@ const statusColor = {
   normal: 'blue',
   high: 'amber',
   urgent: 'red',
+  // employee lifecycle (03-operations/hr.md)
+  applicant: 'slate',
+  hired: 'blue',
+  onboarding: 'cyan',
+  'on-leave': 'amber',
+  offboarded: 'slate',
+  // shift status
+  scheduled: 'blue',
+  'no-show': 'red',
+  // leave request decision
+  approved: 'green',
+  denied: 'red',
 }
 
 const Badge = ({ children, color, status, className = '' }) => {

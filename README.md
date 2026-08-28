@@ -142,26 +142,29 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Concierge | `GET /concierge/conversations`, `POST /concierge/simulate` (admin/manager — exercises `wash-concierge` without a real WhatsApp number) |
 | Tickets | `GET/POST /tickets`, `GET /tickets/:id`, `PATCH /tickets/:id/{status,assign}`, `POST /tickets/:id/comments` |
 | Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
+| HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision`, `GET/POST /hr/payroll-runs`, `GET /hr/payroll-runs/:id` (admin/manager) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
 8-step build order; **steps 1–5, the two highest-leverage agents from step 6, the CRM
-Ticket entity from step 7, and a real accounting ledger, are built and live** as an
-additive module alongside the existing booking-based app — (1) the data model + primary
-wash lifecycle, (2) role-based UI, (3) RBAC (folded into the Phase 2 work), (4) the
+Ticket entity from step 7, a real accounting ledger, and HR & payroll are built and live**
+as an additive module alongside the existing booking-based app — (1) the data model +
+primary wash lifecycle, (2) role-based UI, (3) RBAC (folded into the Phase 2 work), (4) the
 lifecycle's automations, (5) the two integrations the primary lifecycle needs (Stripe,
 WhatsApp Cloud API), (6) `queue-dispatch-agent`'s
 overflow judgment call plus `wash-concierge`, the customer-facing WhatsApp chat agent,
 (7) a real support-ticket system with SLAs that gives `wash-concierge`'s escalations
-somewhere to be tracked to resolution, and a real double-entry accounting ledger
+somewhere to be tracked to resolution, a real double-entry accounting ledger
 (`carwash-compile/05-finance/accounting.md`) that auto-posts from checkout, membership
-billing, and expenses. All of Stripe, WhatsApp, and the AI agents are **credential-gated**:
-this session has none of the underlying real accounts, so each feature runs in a graceful
-fallback mode until real keys are added to `server/.env` — nothing crashes or silently
+billing, and expenses, and a real staff roster with scheduling, leave, and a payroll run
+that posts to that same ledger (`carwash-compile/03-operations/hr.md`). All of Stripe,
+WhatsApp, and the AI agents are **credential-gated**: this session has none of the
+underlying real accounts, so each feature runs in a graceful fallback mode until real keys
+are added to `server/.env` — nothing crashes or silently
 pretends to work without them. The rest of step 6, the wash-sensor/IoT platform, and the
-growth/HR clusters are still ahead — see "Not built yet" below.
+growth cluster (social/marketing) are still ahead — see "Not built yet" below.
 
 - **Data model**: `WashPackage` (+ 3-tier `PackagePricing`), `ServiceBay`, `WashOrder` — see
   `carwash-compile/01-foundation/data-model.md` for the source spec.
@@ -304,13 +307,40 @@ growth/HR clusters are still ahead — see "Not built yet" below.
     accounts, but this app has no defined dollar redemption value per point to post against);
     multi-currency (N/A — spec says so too); budgets and budget-vs-actual variance; and the
     weekly Stripe-payout bank reconciliation workflow.
+- **HR & staffing** (`carwash-compile/03-operations/hr.md`, `server/src/services/payrollService.js`)
+  — a real `Employee` roster, explicitly distinct from the login/RBAC `role` on `users` per
+  the spec's own note (`employees.user` links the two but is nullable either way — an
+  Applicant with no login yet, or an admin login with no HR record, are both valid).
+  - **Scheduling**: `Shift` (employee × time window × optional bay). A shift is flagged
+    `isLate` (the spec's `shift-no-show-alert` signal) computed live the same way ticket SLA
+    risk is — this app has no scheduler to push it proactively. Clock-in/clock-out are this
+    app's own addition (there's no clock-in kiosk hardware to read instead).
+  - **Leave**: request → site-manager approval. The spec's own `google-calendar` integration
+    that would make `Shift` scheduling "automatically respect" approved leave isn't built —
+    instead, creating a `Shift` that overlaps an *approved* leave request is rejected
+    directly (409), the same practical effect without a real calendar. The 10-PTO-day/year
+    monthly accrual math isn't computed (a request/approve workflow only).
+  - **Payroll**: `POST /hr/payroll-runs` sums `Shift` hours (hourly staff) or `annualSalary /
+    26` (salaried, `payrollCadence: biweekly`), plus detail-technician commission — read
+    directly off `WashOrder.price`/`PackagePricing.price`, the spec's own "commission
+    tie-back" so it can never disagree with the P&L's revenue figure — and posts one entry to
+    `5000 Payroll Expense` in the ledger built in the previous phase. `washOrderController`
+    now records `assignedTechnician` (a column that existed since Phase 1 but nothing ever
+    set) when a wash starts, so this has something real to compute against.
+  - `/hr` (admin/manager, tabbed: Employees / Shifts / Leave / Payroll).
+  - **Not built**, per the spec's own text: real state withholding, Stripe disbursement
+    (this only posts the accounting entry — no real money moves), pay-stub document
+    generation (needs `06-platform/knowledge-base.md`'s document store), and the quarterly/
+    annual performance-review workflow (the spec's own text says not to build this as a
+    standing agent at this scale either).
 - **Not built yet** (later phases per the spec's own build order): the rest of the AI agent
   roster (`membership-billing-agent`, `predictive-maintenance-agent` — needs IoT telemetry —
   and the other 8); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and proactive
-  SLA-breach alerting (need a scheduler this app doesn't run yet); social/marketing; and
-  HR/payroll — and RBAC only covers this app's existing admin/manager/staff roles, not the
-  spec's full 7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
-  Technician/Cashier/Fleet Account Manager), which would need its own `Employee` entity.
+  SLA-breach alerting (need a scheduler this app doesn't run yet); and social/marketing —
+  and RBAC only covers this app's existing admin/manager/staff login roles, not the spec's
+  full 7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
+  Technician/Cashier/Fleet Account Manager) — the new `Employee.position` field captures the
+  job title, but doesn't yet drive what a person can actually do in the system.
 
 ## Responsiveness
 

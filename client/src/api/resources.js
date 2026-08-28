@@ -66,6 +66,34 @@ export const ledgerApi = {
   pnl: (params) => apiClient.get('/ledger/pnl', { params }).then((r) => r.data),
 }
 
+export const hrApi = {
+  employees: {
+    list: () => apiClient.get('/hr/employees').then((r) => r.data),
+    get: (id) => apiClient.get(`/hr/employees/${id}`).then((r) => r.data),
+    create: (data) => apiClient.post('/hr/employees', data).then((r) => r.data),
+    update: (id, data) => apiClient.put(`/hr/employees/${id}`, data).then((r) => r.data),
+    remove: (id) => apiClient.delete(`/hr/employees/${id}`).then((r) => r.data),
+  },
+  shifts: {
+    list: (params) => apiClient.get('/hr/shifts', { params }).then((r) => r.data),
+    create: (data) => apiClient.post('/hr/shifts', data).then((r) => r.data),
+    update: (id, data) => apiClient.put(`/hr/shifts/${id}`, data).then((r) => r.data),
+    remove: (id) => apiClient.delete(`/hr/shifts/${id}`).then((r) => r.data),
+    clockIn: (id) => apiClient.patch(`/hr/shifts/${id}/clock-in`).then((r) => r.data),
+    clockOut: (id) => apiClient.patch(`/hr/shifts/${id}/clock-out`).then((r) => r.data),
+  },
+  leaveRequests: {
+    list: (params) => apiClient.get('/hr/leave-requests', { params }).then((r) => r.data),
+    create: (data) => apiClient.post('/hr/leave-requests', data).then((r) => r.data),
+    decide: (id, status) => apiClient.patch(`/hr/leave-requests/${id}/decision`, { status }).then((r) => r.data),
+  },
+  payrollRuns: {
+    list: () => apiClient.get('/hr/payroll-runs').then((r) => r.data),
+    get: (id) => apiClient.get(`/hr/payroll-runs/${id}`).then((r) => r.data),
+    create: (data) => apiClient.post('/hr/payroll-runs', data).then((r) => r.data),
+  },
+}
+
 export const ticketsApi = {
   list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
   get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),

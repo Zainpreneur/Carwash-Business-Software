@@ -292,7 +292,16 @@ const startWash = asyncHandler(async (req, res) => {
   const order = await requireStatus(res, req.params.id, 'bay-assigned');
   await db
     .update(washOrders)
-    .set({ status: 'in-wash', washStartedAt: new Date(), updatedAt: new Date() })
+    .set({
+      status: 'in-wash',
+      washStartedAt: new Date(),
+      // Whoever starts the wash is recorded as the assigned technician — this column
+      // existed since Phase 1 but nothing ever set it until now (03-operations/hr.md's
+      // detail-technician commission and the analytics cube's technician-throughput report
+      // both key off it).
+      assignedTechnician: order.assignedTechnician || req.user._id,
+      updatedAt: new Date(),
+    })
     .where(eq(washOrders._id, order._id));
   await respondUpdated(res, order._id);
 });

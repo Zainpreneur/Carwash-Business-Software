@@ -16,6 +16,7 @@ import Customers from './pages/Customers'
 import Vehicles from './pages/Vehicles'
 import Services from './pages/Services'
 import Staff from './pages/Staff'
+import HR from './pages/HR'
 import Expenses from './pages/Expenses'
 import Finance from './pages/Finance'
 import Reports from './pages/Reports'
@@ -49,6 +50,7 @@ function App() {
               <Route path="/memberships" element={<MembershipPlans />} />
               <Route path="/concierge" element={<Concierge />} />
               <Route path="/staff" element={<Staff />} />
+              <Route path="/hr" element={<HR />} />
               <Route path="/expenses" element={<Expenses />} />
               <Route path="/finance" element={<Finance />} />
               <Route path="/reports" element={<Reports />} />
