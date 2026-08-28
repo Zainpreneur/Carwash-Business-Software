@@ -28,6 +28,7 @@ const agentOpsRoutes = require('./routes/agentOpsRoutes');
 const growthRoutes = require('./routes/growthRoutes');
 const knowledgeBaseRoutes = require('./routes/knowledgeBaseRoutes');
 const documentRoutes = require('./routes/documentRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 const { handleStripeWebhook } = require('./controllers/stripeWebhookController');
 const { verifyWebhook, receiveMessage } = require('./controllers/whatsappWebhookController');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
@@ -86,6 +87,7 @@ app.use('/api/agent-ops', agentOpsRoutes);
 app.use('/api/growth', growthRoutes);
 app.use('/api/knowledge-base', knowledgeBaseRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

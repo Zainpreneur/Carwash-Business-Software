@@ -747,6 +747,22 @@ const knowledgeArticles = pgTable('knowledge_articles', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Business health score (02-intelligence/analytics.md's "Executive View" composite,
+// bir.json's exact per-KPI formulas). "Weighting is intentionally visible and editable by
+// owner" per the spec — a single-row settings table rather than hardcoded constants, so an
+// admin (this app's closest role to the spec's "owner") can rebalance it from the UI without
+// a code change. Seeded with the spec's own default weights (0.30/0.25/0.20/0.15/0.10).
+const healthScoreWeights = pgTable('health_score_weights', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  membershipPenetration: doublePrecision('membership_penetration').notNull().default(0.3),
+  bayUtilization: doublePrecision('bay_utilization').notNull().default(0.25),
+  netMembershipGrowth: doublePrecision('net_membership_growth').notNull().default(0.2),
+  avgReviewRating: doublePrecision('avg_review_rating').notNull().default(0.15),
+  equipmentUptime: doublePrecision('equipment_uptime').notNull().default(0.1),
+  updatedBy: uuid('updated_by_id').references(() => users._id, { onDelete: 'set null' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -785,4 +801,5 @@ module.exports = {
   fleetInquiries,
   reviews,
   knowledgeArticles,
+  healthScoreWeights,
 };

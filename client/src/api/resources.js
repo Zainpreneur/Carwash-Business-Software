@@ -164,6 +164,11 @@ export const documentsApi = {
   washPackageComparison: () => apiClient.get('/documents/wash-package-comparison').then((r) => r.data),
 }
 
+export const analyticsApi = {
+  healthScore: () => apiClient.get('/analytics/health-score').then((r) => r.data),
+  updateWeights: (data) => apiClient.patch('/analytics/health-score/weights', data).then((r) => r.data),
+}
+
 export const ticketsApi = {
   list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
   get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),

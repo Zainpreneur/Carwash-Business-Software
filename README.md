@@ -142,6 +142,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Growth | `GET /growth/segments/{summary,customers}`, `GET/POST /growth/fleet-inquiries`, `PATCH /growth/fleet-inquiries/:id/status`, `GET/POST /growth/reviews` (admin/manager) |
 | Knowledge Base | `GET /knowledge-base`, `GET /knowledge-base/:id` (any authenticated role), `POST /knowledge-base`, `PATCH/DELETE /knowledge-base/:id` (admin/manager) |
 | Documents | `GET /documents/wash-receipt/:orderId`, `GET /documents/membership-agreement/:subscriptionId`, `GET /documents/wash-package-comparison` (any authenticated role) |
+| Analytics | `GET /analytics/health-score` (admin/manager), `PATCH /analytics/health-score/weights` (admin only) |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -150,7 +151,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
 | HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision`, `GET/POST /hr/payroll-runs`, `GET /hr/payroll-runs/:id` (admin/manager) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth, knowledge base)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth, knowledge base, analytics)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
@@ -172,6 +173,8 @@ customer segmentation and a referral program (`carwash-compile/04-growth/marketi
 real authored Knowledge Base that grounds `wash-concierge`'s FAQ answers instead of a static
 system prompt, plus real generated wash-receipt/membership-agreement/wash-package-comparison
 documents rendered from live records (`carwash-compile/06-platform/knowledge-base.md`), a
+real business health score computed from the spec's own KPI formulas with owner-editable
+weights (`carwash-compile/02-intelligence/analytics.md`), a
 real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that
 auto-posts from checkout, membership billing, expenses, payroll, and purchasing, a real
 staff roster with scheduling, leave, and a payroll run that posts to that same ledger
@@ -573,7 +576,41 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
     dependency for three simple templates.
   - **Not built**: e-signature on `membership-agreement` at signup (the spec's own stated
     requirement for that one document type) — signup here is a click, not a signed record.
-- **Not built yet**: the rest of the AI agent roster (`predictive-maintenance-agent` and
+- **Business health score** (`carwash-compile/02-intelligence/analytics.md`'s "Executive View"
+  composite, `server/src/services/healthScoreService.js`) — the one piece of the spec's much
+  larger reporting-cube/analytics chapter this app builds against real data; the rest is
+  listed under "Not built yet" below.
+  - Five components, weighted exactly per the spec's own `bir.json` KPI formulas:
+    membership-penetration-rate (`count(WashOrder where paymentMethod=membership) /
+    count(WashOrder)`, trailing 30 days), bay-utilization-rate (`sum(washCompletedAt -
+    washStartedAt) / (operational hours x bay count)`), net-membership-growth (new minus
+    cancelled subscriptions this calendar month), avg-review-rating (from the real `reviews`
+    table the growth cluster built), and equipment-uptime-rate.
+  - **equipment-uptime-rate is a documented proxy**, not the spec's real figure: the formula
+    wants `Asset` downtime-hours from `03-operations/assets-iot.md`, which this app doesn't
+    have (no IoT/Asset entity at all). This computes "share of `ServiceBay`s not currently
+    down" instead — a live snapshot, not a trailing-30-day downtime ratio — and labels itself
+    as a proxy everywhere it's shown.
+  - **Normalization is this app's own interpretive choice**, called out because the spec
+    doesn't specify one: the five KPIs land on different scales (a 0-1 rate, a raw
+    subscriber-count delta, a 1-5 star average) that can't be weighted-summed as-is, so each
+    is mapped to a 0-100 score first. A component with no underlying data yet (e.g. zero
+    reviews logged) is excluded and its weight redistributed across the rest, rather than
+    scored as a 0 — scoring "no reviews yet" the same as "1-star reviews" would be actively
+    misleading.
+  - Weights are stored in a real `health_score_weights` settings row, not a hardcoded
+    constant — "weighting is intentionally visible and editable by owner" per the spec, and
+    an admin (this app's closest equivalent to "owner") can rebalance them from `/reports`,
+    validated server-side to still sum to 1.0.
+  - Shown at the top of `/reports` (admin/manager) with a per-component breakdown and an
+    "Edit weights" action for admin.
+- **Not built yet**: the reporting cube's other five named reports and full financial
+  statements (P&L/Cash Flow/AR Aging beyond what the existing Finance/Ledger pages already
+  cover), cohort & retention analysis, WoW/MoM/YoY benchmarking, the anomaly-detection rule
+  table, and the scheduled owner/site-manager digests (`02-intelligence/analytics.md`) — a
+  much larger chapter than this one composite score, and one that leans heavily on the
+  scheduler this app doesn't have (see the reminder-jobs gap below) for its "daily"/"weekly"
+  cadences; the rest of the AI agent roster (`predictive-maintenance-agent` and
   `quality-anomaly-detector` — need IoT telemetry this app has no sensors for; `phone-line-agent`
   — needs a real telephony API); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and
   proactive SLA-breach alerting (need a scheduler this app doesn't run yet) —
