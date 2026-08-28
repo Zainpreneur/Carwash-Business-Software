@@ -26,6 +26,7 @@ const {
   packageSupplyUsage,
   purchaseOrders,
   purchaseOrderLines,
+  knowledgeArticles,
 } = require('../db/schema');
 const { postWashOrderCheckout, postMembershipCharge, postExpense } = require('../services/ledgerService');
 const { runPayroll } = require('../services/payrollService');
@@ -53,7 +54,7 @@ const run = async () => {
   console.log('Seeding database...');
 
   await pool.query(
-    'TRUNCATE reviews, fleet_inquiries, agent_metrics, strategy_recommendations, stock_adjustments, purchase_order_lines, purchase_orders, package_supply_usage, supplies, suppliers, payroll_lines, payroll_runs, leave_requests, shifts, employees, journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
+    'TRUNCATE knowledge_articles, reviews, fleet_inquiries, agent_metrics, strategy_recommendations, stock_adjustments, purchase_order_lines, purchase_orders, package_supply_usage, supplies, suppliers, payroll_lines, payroll_runs, leave_requests, shifts, employees, journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
   );
 
   // --- Chart of accounts (05-finance/accounting.md) — seeded once, up front, since every
@@ -526,6 +527,55 @@ const run = async () => {
 
   await logReview({ customer: createdCustomers[3]._id, source: 'google-business-profile', rating: 5, text: 'Fast, friendly, and my car looks brand new every time!', loggedBy: admin._id });
   await logReview({ customer: createdCustomers[4]._id, source: 'google-business-profile', rating: 2, text: 'There was a scratch on my bumper after the wash that wasn\'t there before.', loggedBy: admin._id });
+
+  // --- Knowledge Base (06-platform/knowledge-base.md demo content) ---
+  // The authored document types only — wash-receipt, membership-agreement, and
+  // wash-package-comparison are "generated from" live records per the spec, not authored KB
+  // rows, so they aren't seeded here.
+  await db.insert(knowledgeArticles).values([
+    {
+      slug: 'faq-hours-pricing-membership',
+      category: 'knowledge-article',
+      title: 'Hours, pricing & membership FAQ',
+      body: "We're open 7am-8pm daily, all 4 express bays and both detail bays. Express wash pricing varies by package and vehicle size — ask for current pricing or check list_wash_packages. Memberships are unlimited monthly washes on one vehicle, billed monthly, and can be paused or cancelled anytime with no fee.",
+      updatedBy: admin._id,
+    },
+    {
+      slug: 'rework-guarantee-policy',
+      category: 'customer-facing',
+      title: 'Rework guarantee policy',
+      body: "If you're not satisfied with the quality of your wash, bring your vehicle back within 24 hours and we'll re-run it through the wash at no charge. This does not cover pre-existing damage or interior detailing add-ons. A technician will inspect the vehicle before the rework.",
+      updatedBy: admin._id,
+    },
+    {
+      slug: 'damage-claim-policy',
+      category: 'customer-facing',
+      title: 'Damage claim policy',
+      body: 'Any suspected damage caused during a wash must be reported the same day, with photos if possible. A site manager will inspect the vehicle and our incoming-condition records before approving a claim. We do not process claims or offer compensation over chat — a manager will follow up directly.',
+      updatedBy: admin._id,
+    },
+    {
+      slug: 'opening-closing-checklist',
+      category: 'internal',
+      title: 'Opening / closing checklist',
+      body: 'Opening: unlock bays, power on tunnel conveyor and dryers, check chemical reservoir levels, test all 4 express bays with a water-only cycle, unlock POS. Closing: run end-of-day reconciliation in Checkout, top off chemical reservoirs below 25%, lock detail bay tool cabinets, power down tunnel conveyor.',
+      updatedBy: admin._id,
+    },
+    {
+      slug: 'bay-safety-procedure',
+      category: 'internal',
+      title: 'Bay safety procedure',
+      body: 'No employee enters the tunnel conveyor while it is powered on. Lockout/tagout the conveyor breaker before any manual clearing of a jam. Detail bay pressure washers require eye protection. Report any bay sensor fault (see Assets) to a manager before continuing to use that bay.',
+      updatedBy: admin._id,
+    },
+    {
+      slug: 'chemical-handling-sds-log',
+      category: 'internal',
+      title: 'Chemical handling — SDS log',
+      body: 'Current chemicals in use: tire shine (Supply: Tire Shine Concentrate), foam soap (Supply: Foam Soap Concentrate), wax sealant (Supply: Wax Sealant). Full safety data sheets are kept in the site office binder next to the chemical storage cabinet. Gloves and eye protection required when handling concentrate before dilution.',
+      updatedBy: admin._id,
+    },
+  ]);
 
   console.log('Seed complete!');
   console.log('---------------------------------');

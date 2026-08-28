@@ -2,12 +2,18 @@
 // surface". Handles inbound WhatsApp messages: order-status lookup, membership sign-up,
 // pause/cancel, and FAQ, per the conversational-flow table in 04-growth/whatsapp.md.
 //
-// Two things from the spec are deliberately NOT built here (documented, not silently
-// dropped): detail-bay appointment booking/rescheduling, which the spec itself says should
-// be "WhatsApp Flows (a structured time-slot/package picker) rather than free text" — a
-// separate platform feature, not a chat capability — and a real knowledge_base.search tool
-// (06-platform/knowledge-base.md's KB entity isn't built); FAQ content is folded directly
-// into the system prompt instead.
+// FAQ answers are grounded against real, authored Knowledge Base articles
+// (06-platform/knowledge-base.md) via the search_knowledge_base tool — the spec's own
+// knowledge_base.search — rather than folded into the system prompt as static text, so an
+// admin/manager edit to rework-guarantee-policy or damage-claim-policy takes effect on the
+// next customer message with no code change or redeploy. Only category 'knowledge-article'
+// and 'customer-facing' rows are searchable here; 'internal' articles (SOPs, safety
+// procedures) are staff-only and never surfaced to a customer-facing tool.
+//
+// One thing from the spec is deliberately NOT built here (documented, not silently dropped):
+// detail-bay appointment booking/rescheduling, which the spec itself says should be
+// "WhatsApp Flows (a structured time-slot/package picker) rather than free text" — a separate
+// platform feature, not a chat capability.
 //
 // Guardrails enforced in code, not just the prompt (per the spec's own framing):
 //   - every tool that touches a Customer/Vehicle/MembershipSubscription is scoped to
@@ -29,6 +35,7 @@ const {
   membershipSubscriptions,
   agentConversations,
   tickets,
+  knowledgeArticles,
 } = require('../db/schema');
 const { isAgentsConfigured, getAnthropicClient, AGENT_MODEL } = require('../config/anthropic');
 const { isWhatsAppConfigured, sendWhatsAppText } = require('../utils/whatsapp');
@@ -54,13 +61,13 @@ const MEMORY_DAYS = 90;
 
 const SYSTEM_PROMPT = `You are wash-concierge, the WhatsApp assistant for SplashPoint Express Wash, a 6-bay car wash (4 tunnel-conveyor express bays, 2 detail bays), open 7am-8pm daily.
 
-You help with: checking wash status ("where's my car"), membership sign-up, pausing/cancelling an existing membership, and answering FAQ using list_wash_packages/list_membership_plans for current pricing (never invent a price).
+You help with: checking wash status ("where's my car"), membership sign-up, pausing/cancelling an existing membership, and answering FAQ. Use list_wash_packages/list_membership_plans for current pricing (never invent a price), and use search_knowledge_base for any policy question — hours, guarantee/rework, damage claims, what's included in a package. Always cite what the article actually says; never answer a policy question from memory if search_knowledge_base returns nothing relevant — call escalate_to_human instead.
 
-Guarantee/rework policy: if a customer is unhappy with wash quality, tell them a free rework will be arranged at no charge, then call escalate_to_human so a technician follows up — you cannot schedule the rework yourself.
+Guarantee/rework policy: if a customer is unhappy with wash quality, check search_knowledge_base for the current rework-guarantee-policy wording, tell them what it says, then call escalate_to_human so a technician follows up — you cannot schedule the rework yourself.
 
 Detail-bay appointment booking/rescheduling is NOT something you can do in this chat — tell the customer to call or visit, or call escalate_to_human if they need help now.
 
-You must call escalate_to_human immediately, before replying further, if: the customer mentions damage to their vehicle, sounds upset or negative about their experience, asks for a cash refund, or asks for anything you're not confident (>=70%) falls under status/membership/FAQ above. Never invent a discount, price change, or refund — you have no tool for any of those, so if asked, explain a human needs to handle it and escalate.
+You must call escalate_to_human immediately, before replying further, if: the customer mentions damage to their vehicle, sounds upset or negative about their experience, asks for a cash refund, or asks a policy question search_knowledge_base can't answer, or anything you're not confident (>=70%) falls under status/membership/FAQ above. Never invent a discount, price change, refund, or policy — you have no tool for the first three, and search_knowledge_base is the only source of truth for the fourth, so if asked something it doesn't cover, explain a human needs to handle it and escalate.
 
 Keep replies short and friendly, plain text (no markdown), like a real WhatsApp message. If you don't recognize the sender's number in our system, ask for their name or vehicle plate before doing anything account-specific.`;
 
@@ -102,6 +109,15 @@ const TOOLS = [
       type: 'object',
       properties: { action: { type: 'string', enum: ['pause', 'cancel'] } },
       required: ['action'],
+    },
+  },
+  {
+    name: 'search_knowledge_base',
+    description: "Search the shop's authored policy/FAQ articles (hours, pricing structure, guarantee/rework, damage claims, package comparisons). Always use this instead of answering a policy question from memory.",
+    input_schema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'Keywords from the customer\'s question, e.g. "damage claim" or "rework guarantee"' } },
+      required: ['query'],
     },
   },
   {
@@ -224,6 +240,28 @@ const executeTool = async (name, input, ctx) => {
       }
       await db.update(membershipSubscriptions).set({ status: 'cancelled', updatedAt: new Date() }).where(eq(membershipSubscriptions._id, sub._id));
       return { ok: true, status: 'cancelled' };
+    }
+
+    case 'search_knowledge_base': {
+      // Customer-facing search: only knowledge-article/customer-facing rows are eligible —
+      // 'internal' articles (opening-closing-checklist, bay-safety-procedure,
+      // chemical-handling-sds-log) are staff-only and never reachable from this tool.
+      const rows = await db
+        .select()
+        .from(knowledgeArticles)
+        .where(inArray(knowledgeArticles.category, ['knowledge-article', 'customer-facing']));
+      const terms = String(input.query).toLowerCase().split(/\W+/).filter(Boolean);
+      const scored = rows
+        .map((a) => {
+          const haystack = `${a.title} ${a.body}`.toLowerCase();
+          const score = terms.reduce((sum, t) => sum + (haystack.includes(t) ? 1 : 0), 0);
+          return { a, score };
+        })
+        .filter((r) => r.score > 0)
+        .sort((x, y) => y.score - x.score)
+        .slice(0, 3);
+      if (!scored.length) return { found: false };
+      return { found: true, articles: scored.map(({ a }) => ({ title: a.title, body: a.body })) };
     }
 
     case 'escalate_to_human': {

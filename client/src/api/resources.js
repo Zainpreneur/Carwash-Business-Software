@@ -150,6 +150,14 @@ export const growthApi = {
   },
 }
 
+export const knowledgeBaseApi = {
+  list: (category) => apiClient.get('/knowledge-base', { params: { category } }).then((r) => r.data),
+  get: (id) => apiClient.get(`/knowledge-base/${id}`).then((r) => r.data),
+  create: (data) => apiClient.post('/knowledge-base', data).then((r) => r.data),
+  update: (id, data) => apiClient.patch(`/knowledge-base/${id}`, data).then((r) => r.data),
+  remove: (id) => apiClient.delete(`/knowledge-base/${id}`).then((r) => r.data),
+}
+
 export const ticketsApi = {
   list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
   get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),

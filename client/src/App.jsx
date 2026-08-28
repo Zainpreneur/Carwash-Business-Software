@@ -24,6 +24,7 @@ import Reports from './pages/Reports'
 import Simulations from './pages/Simulations'
 import OpsCenter from './pages/OpsCenter'
 import Growth from './pages/Growth'
+import KnowledgeBase from './pages/KnowledgeBase'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
 
@@ -47,6 +48,7 @@ function App() {
             <Route path="/customers" element={<Customers />} />
             <Route path="/vehicles" element={<Vehicles />} />
             <Route path="/services" element={<Services />} />
+            <Route path="/knowledge-base" element={<KnowledgeBase />} />
             <Route path="/settings" element={<Settings />} />
 
             <Route element={<RoleRoute roles={['admin', 'manager']} />}>

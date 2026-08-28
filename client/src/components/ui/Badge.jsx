@@ -83,6 +83,10 @@ const statusColor = {
   'at-risk-pay-per-wash': 'amber',
   lapsed: 'slate',
   'fleet-commercial': 'purple',
+  // knowledge base article category (06-platform/knowledge-base.md)
+  'knowledge-article': 'blue',
+  'customer-facing': 'green',
+  internal: 'slate',
 }
 
 const Badge = ({ children, color, status, className = '' }) => {

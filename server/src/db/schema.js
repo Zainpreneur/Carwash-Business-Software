@@ -716,6 +716,37 @@ const reviews = pgTable('reviews', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Knowledge Base (06-platform/knowledge-base.md) — closes a gap wash-concierge's own header
+// comment has flagged since it was built: the spec names a real `knowledge_base.search` tool
+// (02-intelligence/ai-agents.md's tool list for wash-concierge) and says wash-concierge,
+// review-response-agent, and phone-line-agent must cite a KB article rather than freely
+// inventing a policy answer. Sized for a single location per the spec: a handful of authored
+// documents, versioned on material edit — prior versions are kept, not overwritten, which
+// matters for chemical-handling-sds-log ("what did the SDS say on a given date") and
+// membership-agreement ("what terms did a member actually sign under").
+// Not built: the spec's `google-business-profile` source (public policy sync) and
+// `generic-custom-webhook`-backed internal wiki — no real GBP/webhook credentials in this
+// environment, so every article here is authored directly through the /knowledge-base page
+// instead of synced from an external source. review-response-agent doesn't consult this table
+// (it makes no Claude call — nothing to ground), and phone-line-agent isn't built (needs a
+// real telephony API) so it can't either; only wash-concierge is wired to search it.
+const knowledgeArticles = pgTable('knowledge_articles', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  slug: text('slug').notNull().unique(),
+  // category: knowledge-article (customer FAQ, cited by wash-concierge) | customer-facing
+  // (policy documents) | internal (SOPs, safety procedures — staff-only, never surfaced to
+  // wash-concierge's search tool)
+  category: text('category').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  version: integer('version').notNull().default(1),
+  // previousVersions: [{version, title, body, updatedAt}], oldest first; null until the first edit
+  previousVersions: jsonb('previous_versions'),
+  updatedBy: uuid('updated_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -753,4 +784,5 @@ module.exports = {
   strategyRecommendations,
   fleetInquiries,
   reviews,
+  knowledgeArticles,
 };

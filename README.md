@@ -140,6 +140,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Simulations | `GET /simulations/{bay-throughput,demand-forecast,staffing-capacity,membership-economics,cash-flow-forecast}`, `POST /simulations/pricing-scenario` (admin/manager) |
 | Agent ops | `GET /agent-ops/orchestrator-snapshot`, `POST /agent-ops/strategy-advisor/ask`, `GET /agent-ops/strategy-advisor/history`, `GET /agent-ops/system-health-report` (admin/manager) |
 | Growth | `GET /growth/segments/{summary,customers}`, `GET/POST /growth/fleet-inquiries`, `PATCH /growth/fleet-inquiries/:id/status`, `GET/POST /growth/reviews` (admin/manager) |
+| Knowledge Base | `GET /knowledge-base`, `GET /knowledge-base/:id` (any authenticated role), `POST /knowledge-base`, `PATCH/DELETE /knowledge-base/:id` (admin/manager) |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -148,7 +149,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
 | HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision`, `GET/POST /hr/payroll-runs`, `GET /hr/payroll-runs/:id` (admin/manager) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth, knowledge base)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
@@ -167,6 +168,8 @@ growth cluster's two task agents) — five of the nine make **no Claude call at 
 below — (7) a real support-ticket system with SLAs
 that gives `wash-concierge`'s escalations somewhere to be tracked to resolution, real
 customer segmentation and a referral program (`carwash-compile/04-growth/marketing.md`), a
+real authored Knowledge Base that grounds `wash-concierge`'s FAQ answers instead of a static
+system prompt (`carwash-compile/06-platform/knowledge-base.md`), a
 real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that
 auto-posts from checkout, membership billing, expenses, payroll, and purchasing, a real
 staff roster with scheduling, leave, and a payroll run that posts to that same ledger
@@ -263,11 +266,12 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
     reply and a staff notification (`wash_concierge_escalation`), just not an AI-generated
     one. A `/concierge` admin page shows recent conversations and lets staff exercise the
     agent (`POST /api/concierge/simulate`) without a real WhatsApp number.
+  - FAQ answers are grounded against real, authored Knowledge Base articles via a
+    `search_knowledge_base` tool — the spec's own `knowledge_base.search` — rather than
+    folded into the system prompt as static text; see the **Knowledge Base** section below.
   - **Not built** from the spec's own text: detail-bay appointment booking/rescheduling via
     chat — the spec itself says that should be WhatsApp Flows (a structured picker), a
-    separate platform feature, not a conversational capability — and a real
-    `knowledge_base.search` tool (no KB entity built yet); FAQ content is folded into the
-    system prompt instead.
+    separate platform feature, not a conversational capability.
   - `membership-billing-agent` (`server/src/agents/membershipBillingAgent.js`) manages the
     past-due → suspended → cancelled lifecycle on a failed membership charge — but makes
     **no Claude call at all**. The spec's own description of this agent is pure threshold/
@@ -508,6 +512,39 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
     `SocialPost` content-calendar publishing pipeline; paid ad campaigns and A/B testing
     (need real ad-platform accounts); and the Google Business Profile/social-mention
     monitoring that would detect a review automatically instead of a staff member logging it.
+- **Knowledge Base** (`carwash-compile/06-platform/knowledge-base.md`,
+  `server/src/db/schema.js`'s `knowledgeArticles` table, `server/src/controllers/knowledgeBaseController.js`)
+  — closes a gap `wash-concierge`'s own file header had flagged since Phase 6: the spec names
+  a real `knowledge_base.search` tool, and says `wash-concierge`/`review-response-agent`/
+  `phone-line-agent` must cite a KB article rather than freely inventing a policy answer.
+  - Authored articles in three categories: `knowledge-article` (FAQ, searchable by
+    `wash-concierge`), `customer-facing` (policy documents, also searchable), and `internal`
+    (SOPs/safety procedures, staff-only — never reachable from the customer-facing search
+    tool, verified by querying it with internal-only terminology and confirming no match).
+  - Edits version instead of overwrite: every save bumps `version` and pushes the prior
+    title/body onto `previousVersions` rather than discarding it — the spec calls this out by
+    name for `chemical-handling-sds-log` ("what did the SDS say on a given date") and
+    `membership-agreement`, and the other article types get the same history for free. A
+    version-history view is on `/knowledge-base`.
+  - `wash-concierge`'s new `search_knowledge_base` tool does simple keyword-overlap scoring
+    over the searchable categories and returns the top 3 matches (or `found: false`) — no
+    vector search or embeddings, appropriate for a single-location shop's "a handful of
+    documents" scale per the spec's own framing. The system prompt requires citing what an
+    article actually says and escalating instead of answering from memory when nothing
+    relevant comes back.
+  - `/knowledge-base` (all roles can read — bay-safety-procedure and the SDS log are for
+    floor staff, not just admin/manager; only admin/manager can author/edit/delete, same
+    write gate as Services/Wash Packages).
+  - **Not built**: the spec's `google-business-profile` (public policy sync) and
+    `generic-custom-webhook`-backed internal wiki sources — articles are authored directly
+    through this page instead of synced from an external system; e-signature on
+    `membership-agreement`; and deterministic-render generation of `wash-receipt`,
+    `membership-agreement`, and `wash-package-comparison` — the spec frames those three as
+    "generated from" live records (WashOrder/Invoice/Payment, MembershipSubscription/
+    MembershipPlan, WashPackage/PackagePricing), not authored KB rows, so they're out of
+    scope for this authored-content page. `review-response-agent` doesn't consult the KB (it
+    makes no Claude call — nothing to ground), and `phone-line-agent` isn't built (needs a
+    real telephony API) so it can't either; only `wash-concierge` is wired to search it.
 - **Not built yet**: the rest of the AI agent roster (`predictive-maintenance-agent` and
   `quality-anomaly-detector` — need IoT telemetry this app has no sensors for; `phone-line-agent`
   — needs a real telephony API); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and
