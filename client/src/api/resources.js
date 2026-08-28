@@ -158,6 +158,12 @@ export const knowledgeBaseApi = {
   remove: (id) => apiClient.delete(`/knowledge-base/${id}`).then((r) => r.data),
 }
 
+export const documentsApi = {
+  washReceipt: (orderId) => apiClient.get(`/documents/wash-receipt/${orderId}`).then((r) => r.data),
+  membershipAgreement: (subscriptionId) => apiClient.get(`/documents/membership-agreement/${subscriptionId}`).then((r) => r.data),
+  washPackageComparison: () => apiClient.get('/documents/wash-package-comparison').then((r) => r.data),
+}
+
 export const ticketsApi = {
   list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
   get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),

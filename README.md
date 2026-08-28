@@ -141,6 +141,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Agent ops | `GET /agent-ops/orchestrator-snapshot`, `POST /agent-ops/strategy-advisor/ask`, `GET /agent-ops/strategy-advisor/history`, `GET /agent-ops/system-health-report` (admin/manager) |
 | Growth | `GET /growth/segments/{summary,customers}`, `GET/POST /growth/fleet-inquiries`, `PATCH /growth/fleet-inquiries/:id/status`, `GET/POST /growth/reviews` (admin/manager) |
 | Knowledge Base | `GET /knowledge-base`, `GET /knowledge-base/:id` (any authenticated role), `POST /knowledge-base`, `PATCH/DELETE /knowledge-base/:id` (admin/manager) |
+| Documents | `GET /documents/wash-receipt/:orderId`, `GET /documents/membership-agreement/:subscriptionId`, `GET /documents/wash-package-comparison` (any authenticated role) |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -169,7 +170,8 @@ below — (7) a real support-ticket system with SLAs
 that gives `wash-concierge`'s escalations somewhere to be tracked to resolution, real
 customer segmentation and a referral program (`carwash-compile/04-growth/marketing.md`), a
 real authored Knowledge Base that grounds `wash-concierge`'s FAQ answers instead of a static
-system prompt (`carwash-compile/06-platform/knowledge-base.md`), a
+system prompt, plus real generated wash-receipt/membership-agreement/wash-package-comparison
+documents rendered from live records (`carwash-compile/06-platform/knowledge-base.md`), a
 real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that
 auto-posts from checkout, membership billing, expenses, payroll, and purchasing, a real
 staff roster with scheduling, leave, and a payroll run that posts to that same ledger
@@ -537,14 +539,40 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
     write gate as Services/Wash Packages).
   - **Not built**: the spec's `google-business-profile` (public policy sync) and
     `generic-custom-webhook`-backed internal wiki sources — articles are authored directly
-    through this page instead of synced from an external system; e-signature on
-    `membership-agreement`; and deterministic-render generation of `wash-receipt`,
-    `membership-agreement`, and `wash-package-comparison` — the spec frames those three as
-    "generated from" live records (WashOrder/Invoice/Payment, MembershipSubscription/
-    MembershipPlan, WashPackage/PackagePricing), not authored KB rows, so they're out of
-    scope for this authored-content page. `review-response-agent` doesn't consult the KB (it
-    makes no Claude call — nothing to ground), and `phone-line-agent` isn't built (needs a
-    real telephony API) so it can't either; only `wash-concierge` is wired to search it.
+    through this page instead of synced from an external system. `review-response-agent`
+    doesn't consult the KB (it makes no Claude call — nothing to ground), and
+    `phone-line-agent` isn't built (needs a real telephony API) so it can't either; only
+    `wash-concierge` is wired to search it.
+- **Generated documents** (`carwash-compile/06-platform/knowledge-base.md`'s three
+  "generated from" document types, `server/src/services/documentService.js`) — deterministic
+  template + variable renders against live records, "same pattern as the WhatsApp templates"
+  per the spec's own text, as opposed to the authored articles above.
+  - **`wash-receipt`** — customer, vehicle, package, payment method, and a subtotal/tax/total
+    breakdown that reads the same `TAX_RATE` constant the accounting ledger posted that
+    checkout with, so a receipt can never disagree with the books. Only generates for an
+    order that's actually been checked out — a receipt for an in-progress wash would be
+    printing a sale that hasn't happened yet. A receipt icon appears on any `completed` row
+    in `/wash-queue`.
+  - **`membership-agreement`** — member, vehicle, plan terms (unlimited/capped, rollover,
+    monthly price, billing day) plus the standard pause/cancel/past-due-suspend-cancel policy
+    text, from a "View agreement" icon on each row in `/memberships`. Documented gap: this
+    app doesn't snapshot plan terms onto a subscription at signup
+    (`membershipSubscriptions.plan` is a live foreign key, not a point-in-time copy), so
+    re-generating this later shows the plan's *current* terms — if the plan's price changed
+    after a member signed up, this won't show what they actually agreed to on their signup
+    date, which is the spec's own stated reason for wanting version history on this document
+    type in the first place.
+  - **`wash-package-comparison`** — every active package's tiers and per-vehicle-type
+    pricing, from a "Package comparison" button on `/memberships` — the same data
+    `wash-concierge`'s `list_wash_packages` tool reads, rendered as something a cashier can
+    hand a customer instead of narrating pricing verbally.
+  - No PDF file is generated or stored — each document is a structured render the browser's
+    own print dialog turns into a PDF (`window.print()`, scoped via a print stylesheet so it
+    doesn't dump the whole dashboard onto paper), which is the deterministic template +
+    variable substitution behavior the spec actually asks for, without adding a PDF-rendering
+    dependency for three simple templates.
+  - **Not built**: e-signature on `membership-agreement` at signup (the spec's own stated
+    requirement for that one document type) — signup here is a click, not a signed record.
 - **Not built yet**: the rest of the AI agent roster (`predictive-maintenance-agent` and
   `quality-anomaly-detector` — need IoT telemetry this app has no sensors for; `phone-line-agent`
   — needs a real telephony API); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and

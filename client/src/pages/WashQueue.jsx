@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, Waves, ArrowRight, CheckCircle2, XCircle, LogOut, Ban } from 'lucide-react'
+import { Plus, Waves, ArrowRight, CheckCircle2, XCircle, LogOut, Ban, Receipt } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
-import { washOrdersApi, serviceBaysApi } from '../api/resources'
+import { washOrdersApi, serviceBaysApi, documentsApi } from '../api/resources'
 import { getErrorMessage } from '../api/client'
 import Spinner from '../components/ui/Spinner'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
 import BayBoard from '../components/washqueue/BayBoard'
 import WashOrderFormModal from '../components/washqueue/WashOrderFormModal'
+import DocumentViewer from '../components/documents/DocumentViewer'
 
 const STATUS_LABEL = {
   queued: 'Queued',
@@ -27,6 +28,8 @@ const WashQueue = () => {
   const [showAll, setShowAll] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [busyId, setBusyId] = useState(null)
+  const [doc, setDoc] = useState(null)
+  const [docOpen, setDocOpen] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -60,6 +63,15 @@ const WashQueue = () => {
   const onSaved = () => {
     setFormOpen(false)
     load()
+  }
+
+  const viewReceipt = async (orderId) => {
+    try {
+      setDoc(await documentsApi.washReceipt(orderId))
+      setDocOpen(true)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    }
   }
 
   return (
@@ -195,11 +207,15 @@ const WashQueue = () => {
                             <LogOut size={13} /> Checkout
                           </button>
                         )}
-                        {['completed', 'cancelled'].includes(o.status) && (
-                          <span className="text-xs text-slate-400">
-                            {o.status === 'completed' ? format(new Date(o.checkedOutAt || o.updatedAt), 'MMM d, h:mm a') : '—'}
-                          </span>
+                        {o.status === 'completed' && (
+                          <>
+                            <button onClick={() => viewReceipt(o._id)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" title="View receipt">
+                              <Receipt size={14} />
+                            </button>
+                            <span className="text-xs text-slate-400">{format(new Date(o.checkedOutAt || o.updatedAt), 'MMM d, h:mm a')}</span>
+                          </>
                         )}
+                        {o.status === 'cancelled' && <span className="text-xs text-slate-400">—</span>}
                       </div>
                     </td>
                   </tr>
@@ -211,6 +227,7 @@ const WashQueue = () => {
       )}
 
       <WashOrderFormModal open={formOpen} onClose={() => setFormOpen(false)} onSaved={onSaved} />
+      <DocumentViewer open={docOpen} onClose={() => setDocOpen(false)} doc={doc} />
     </div>
   )
 }

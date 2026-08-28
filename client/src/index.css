@@ -83,3 +83,22 @@
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium;
   }
 }
+
+/* Generated-document printing (client/src/components/documents/DocumentViewer.jsx) — the
+   browser's own print dialog is the "PDF export" for wash-receipt/membership-agreement/
+   wash-package-comparison; this hides everything outside the open document modal so printing
+   doesn't dump the whole dashboard onto paper. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #document-viewer-print-area,
+  #document-viewer-print-area * {
+    visibility: visible;
+  }
+  #document-viewer-print-area {
+    position: absolute;
+    inset: 0;
+    padding: 24px;
+  }
+}

@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Pencil, Trash2, Users2, PauseCircle, PlayCircle, XCircle, CreditCard, MessageCircle, Bot } from 'lucide-react'
+import { Plus, Pencil, Trash2, Users2, PauseCircle, PlayCircle, XCircle, CreditCard, MessageCircle, Bot, FileText, Scale } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { membershipPlansApi, membershipSubscriptionsApi, washPackagesApi, integrationsApi } from '../api/resources'
+import { membershipPlansApi, membershipSubscriptionsApi, washPackagesApi, integrationsApi, documentsApi } from '../api/resources'
 import { getErrorMessage } from '../api/client'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import Spinner from '../components/ui/Spinner'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
+import DocumentViewer from '../components/documents/DocumentViewer'
 
 const tiers = ['basic-unlimited', 'premium-unlimited', 'fleet-unlimited']
 const emptyForm = { tier: 'basic-unlimited', name: '', coveredPackage: '', monthlyPrice: '', isUnlimited: true, washesPerMonthCap: '', rolloverAllowed: false, active: true }
@@ -26,6 +27,8 @@ const MembershipPlans = () => {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [busyId, setBusyId] = useState(null)
+  const [doc, setDoc] = useState(null)
+  const [docOpen, setDocOpen] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -115,6 +118,15 @@ const MembershipPlans = () => {
     }
   }
 
+  const viewDocument = async (fetcher) => {
+    try {
+      setDoc(await fetcher())
+      setDocOpen(true)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    }
+  }
+
   if (loading) return <Spinner full />
 
   return (
@@ -137,9 +149,14 @@ const MembershipPlans = () => {
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">{plans.length} membership plans</p>
-        <button className="btn-primary" onClick={openCreate}>
-          <Plus size={16} /> Add plan
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={() => viewDocument(documentsApi.washPackageComparison)}>
+            <Scale size={15} /> Package comparison
+          </button>
+          <button className="btn-primary" onClick={openCreate}>
+            <Plus size={16} /> Add plan
+          </button>
+        </div>
       </div>
 
       {plans.length === 0 ? (
@@ -200,6 +217,9 @@ const MembershipPlans = () => {
                     <td><Badge status={s.status}>{s.status}</Badge></td>
                     <td>
                       <div className="flex justify-end gap-1">
+                        <button onClick={() => viewDocument(() => documentsApi.membershipAgreement(s._id))} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" title="View agreement">
+                          <FileText size={15} />
+                        </button>
                         {s.status === 'active' && (
                           <button disabled={busyId === s._id} onClick={() => runSubAction(s._id, () => membershipSubscriptionsApi.pause(s._id), 'Paused')} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" title="Pause">
                             <PauseCircle size={15} />
@@ -298,6 +318,8 @@ const MembershipPlans = () => {
         title="Delete plan"
         message={`Remove "${deleteTarget?.name}"?`}
       />
+
+      <DocumentViewer open={docOpen} onClose={() => setDocOpen(false)} doc={doc} />
     </div>
   )
 }
