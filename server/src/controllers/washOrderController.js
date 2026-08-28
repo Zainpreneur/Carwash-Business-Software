@@ -71,8 +71,22 @@ const baseQuery = () =>
 const getWashOrders = asyncHandler(async (req, res) => {
   const { status, active, bay, date, customer, page = 1, limit = 50 } = req.query;
   const filters = [];
-  if (status) filters.push(eq(washOrders.status, status));
-  if (active === 'true') filters.push(inArray(washOrders.status, NON_TERMINAL_STATUSES));
+  // RBAC (carwash-compile/01-foundation/dashboards.md, Bay Attendant): "my queue today"
+  // only, not the full order history — staff can never pull completed/cancelled orders
+  // through this endpoint, regardless of what status/active they request. Site-manager-
+  // level history (the /wash-queue "show completed & cancelled" view) is admin/manager only.
+  if (req.user.role === 'staff') {
+    // A specific non-terminal status (e.g. the Checkout page's ready-for-pickup) still
+    // narrows the result; a terminal one is silently denied by falling back to "all active".
+    filters.push(
+      status && NON_TERMINAL_STATUSES.includes(status)
+        ? eq(washOrders.status, status)
+        : inArray(washOrders.status, NON_TERMINAL_STATUSES)
+    );
+  } else {
+    if (status) filters.push(eq(washOrders.status, status));
+    if (active === 'true') filters.push(inArray(washOrders.status, NON_TERMINAL_STATUSES));
+  }
   if (bay) filters.push(eq(washOrders.bay, bay));
   if (customer) filters.push(eq(washOrders.customer, customer));
   if (date) {
@@ -92,6 +106,33 @@ const getWashOrders = asyncHandler(async (req, res) => {
 
   const [{ total }] = await db.select({ total: count() }).from(washOrders).where(where);
   res.json({ data: rows, total: Number(total), page: Number(page), pages: Math.ceil(Number(total) / Number(limit)) });
+});
+
+// Cashier home-view tile (dashboards.md): "today's revenue split (membership vs.
+// pay-per-wash vs. fleet)". Buckets today's completed wash orders by paymentMethod.
+const getCheckoutStats = asyncHandler(async (req, res) => {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const rows = await db
+    .select({ paymentMethod: washOrders.paymentMethod, price: washOrders.price })
+    .from(washOrders)
+    .where(and(eq(washOrders.status, 'completed'), gte(washOrders.checkedOutAt, start), lte(washOrders.checkedOutAt, end)));
+
+  const split = { membership: 0, payPerWash: 0, fleet: 0 };
+  for (const r of rows) {
+    if (r.paymentMethod === 'membership') split.membership += r.price;
+    else if (r.paymentMethod === 'fleet-invoice') split.fleet += r.price;
+    else split.payPerWash += r.price;
+  }
+
+  res.json({
+    checkedOutToday: rows.length,
+    totalRevenue: split.membership + split.payPerWash + split.fleet,
+    split,
+  });
 });
 
 const getWashOrder = asyncHandler(async (req, res) => {
@@ -333,6 +374,7 @@ const deleteWashOrder = asyncHandler(async (req, res) => {
 
 module.exports = {
   getWashOrders,
+  getCheckoutStats,
   getWashOrder,
   createWashOrder,
   assignBay,

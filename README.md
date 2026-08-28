@@ -125,25 +125,39 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Notifications | `GET /notifications`, `/notifications/unread-count`, `PATCH /notifications/:id/read`, `/notifications/read-all` |
 | Wash packages | `GET/POST /wash-packages`, `GET/PUT/DELETE /wash-packages/:id` (each carries 3-tier pricing) |
 | Service bays | `GET /service-bays`, `POST /service-bays`, `PUT/DELETE /service-bays/:id` |
-| Wash orders  | `GET/POST /wash-orders`, `GET/DELETE /wash-orders/:id`, `PATCH /wash-orders/:id/{assign-bay,start-wash,complete-wash,qc,checkout,cancel}` |
+| Wash orders  | `GET/POST /wash-orders`, `GET /wash-orders/checkout-stats`, `GET/DELETE /wash-orders/:id`, `PATCH /wash-orders/:id/{assign-bay,start-wash,complete-wash,qc,checkout,cancel}` |
 
-## SplashPoint Wash Queue (spec Phase 1)
+## SplashPoint Wash Queue (spec Phases 1–2)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide recommends building
-in phases rather than all at once; **Phase 1 — the data model and primary wash lifecycle — is
-built and live** as an additive module alongside the existing booking-based app:
+in phases rather than all at once; **Phases 1–2 — the data model, primary wash lifecycle, and
+role-based UI/RBAC for it — are built and live** as an additive module alongside the existing
+booking-based app:
 
 - **Data model**: `WashPackage` (+ 3-tier `PackagePricing`), `ServiceBay`, `WashOrder` — see
   `carwash-compile/01-foundation/data-model.md` for the source spec.
-- **Lifecycle** (`/wash-queue` in the sidebar): queue-entry → auto bay assignment (matched to
-  the package's tunnel/detail-bay lane) → start wash → complete wash → quality check
-  (pass → ready for pickup, fail → looped back to rework) → checkout, plus cancel from
-  Queued/BayAssigned. State transitions are enforced server-side (`washOrderController.js`).
-- **Not built yet** (later phases per the spec's own build order): role-specific dashboards
-  beyond this single queue view, RBAC beyond the existing admin/manager/staff roles,
-  `MembershipSubscription` billing, AI agents, IoT/predictive maintenance, WhatsApp/social/CRM,
-  the accounting ledger, and HR/payroll.
+- **Lifecycle**: queue-entry → auto bay assignment (matched to the package's
+  tunnel/detail-bay lane) → start wash → complete wash → quality check (pass → ready for
+  pickup, fail → looped back to rework) → checkout, plus cancel from Queued/BayAssigned.
+  State transitions are enforced server-side (`washOrderController.js`).
+- **Role-based views** (`carwash-compile/01-foundation/dashboards.md`), all in the sidebar:
+  - **My Queue** (`/floor`, all roles) — the Bay Attendant/Wash Technician home view: next 5
+    queued vehicles, next open bay, one-tap log-vehicle/assign-bay/start-wash/complete-wash/
+    QC pass-fail. Deliberately minimal, mobile-first.
+  - **Checkout** (`/checkout`, all roles) — the Cashier home view: the ready-for-pickup
+    queue plus today's revenue split (membership / pay-per-wash / fleet).
+  - **Wash Ops** (`/wash-queue`, admin/manager only) — the Site Manager view: the full
+    6-bay status board and order table, including completed/cancelled history.
+- **RBAC**: `GET /wash-orders` enforces server-side, not just in the UI — a `staff` request
+  can never pull completed/cancelled orders (a specific *non-terminal* status like
+  `ready-for-pickup` still narrows the result; `admin`/`manager` are unrestricted). Matches
+  the spec's Bay Attendant scoping: "'my queue today' only, not the full order history."
+- **Not built yet** (later phases per the spec's own build order): `MembershipSubscription`
+  billing, AI agents, IoT/predictive maintenance, WhatsApp/social/CRM, the accounting ledger,
+  and HR/payroll — and RBAC only covers this app's existing admin/manager/staff roles, not
+  the spec's full 7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
+  Technician/Cashier/Fleet Account Manager), which would need its own `Employee` entity.
 
 ## Responsiveness
 

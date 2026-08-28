@@ -6,6 +6,8 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import WashQueue from './pages/WashQueue'
+import FloorQueue from './pages/FloorQueue'
+import Checkout from './pages/Checkout'
 import Bookings from './pages/Bookings'
 import Customers from './pages/Customers'
 import Vehicles from './pages/Vehicles'
@@ -29,7 +31,8 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<DashboardLayout />}>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/wash-queue" element={<WashQueue />} />
+            <Route path="/floor" element={<FloorQueue />} />
+            <Route path="/checkout" element={<Checkout />} />
             <Route path="/bookings" element={<Bookings />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/vehicles" element={<Vehicles />} />
@@ -37,6 +40,7 @@ function App() {
             <Route path="/settings" element={<Settings />} />
 
             <Route element={<RoleRoute roles={['admin', 'manager']} />}>
+              <Route path="/wash-queue" element={<WashQueue />} />
               <Route path="/staff" element={<Staff />} />
               <Route path="/expenses" element={<Expenses />} />
               <Route path="/reports" element={<Reports />} />
