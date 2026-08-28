@@ -104,6 +104,7 @@ seed` once the stack is up if you want demo data.
 | `STRIPE_SECRET_KEY` | Optional — enables real membership billing via Stripe Checkout/subscriptions. Omit to run membership signup as a local demo (see below). |
 | `STRIPE_WEBHOOK_SECRET` | Optional — required for `/api/webhooks/stripe` to process events (payment success/failure); the endpoint 501s without it even if `STRIPE_SECRET_KEY` is set. |
 | `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` | Optional — enables real WhatsApp Cloud API sends. Omit to log automation decisions to `customer_messages` with `status: not_configured` instead of sending. |
+| `ANTHROPIC_API_KEY` | Optional — enables `queue-dispatch-agent`'s real overflow judgment call. Unlike Stripe/WhatsApp there's no free test mode; costs real tokens once set. Omit to use a fixed fallback message. |
 | `WHATSAPP_API_VERSION` | Optional, defaults to `v21.0`. |
 
 **client/.env**
@@ -132,22 +133,23 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Wash orders  | `GET/POST /wash-orders`, `GET /wash-orders/checkout-stats`, `GET /wash-orders/customer-messages`, `GET/DELETE /wash-orders/:id`, `PATCH /wash-orders/:id/{assign-bay,start-wash,complete-wash,qc,checkout,cancel}` |
 | Membership plans | `GET/POST /membership-plans`, `GET/PUT/DELETE /membership-plans/:id` |
 | Membership subscriptions | `GET/POST /membership-subscriptions`, `PATCH /membership-subscriptions/:id/{pause,resume,cancel}` |
-| Integrations | `GET /integrations/status` — whether Stripe/WhatsApp are configured |
+| Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4 & 5)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5 & the start of 6)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
-8-step build order; **steps 1–5 are built and live** as an additive module alongside the
-existing booking-based app — (1) the data model + primary wash lifecycle, (2) role-based UI,
-(3) RBAC (folded into the Phase 2 work), (4) the lifecycle's automations, and (5) the two
-integrations the primary lifecycle needs, Stripe and WhatsApp Cloud API. Both are
-**credential-gated**: this session has no real Stripe account or Meta Business/WhatsApp
-setup, so each feature runs in a graceful local-demo mode until real keys are added to
-`server/.env` — nothing crashes or silently pretends to work without them. Step 6 (AI
-agents), the wash-sensor/IoT platform, and the rest of the growth/finance/HR clusters are
-still ahead — see "Not built yet" below.
+8-step build order; **steps 1–5, plus the highest-leverage piece of step 6, are built and
+live** as an additive module alongside the existing booking-based app — (1) the data model +
+primary wash lifecycle, (2) role-based UI, (3) RBAC (folded into the Phase 2 work), (4) the
+lifecycle's automations, (5) the two integrations the primary lifecycle needs (Stripe,
+WhatsApp Cloud API), and the start of (6) AI agents: `queue-dispatch-agent`'s overflow
+judgment call. All three of Stripe, WhatsApp, and the AI agent are **credential-gated**: this
+session has none of the underlying real accounts, so each feature runs in a graceful
+fallback mode until real keys are added to `server/.env` — nothing crashes or silently
+pretends to work without them. The rest of step 6, the wash-sensor/IoT platform, and the
+growth/finance/HR clusters are still ahead — see "Not built yet" below.
 
 - **Data model**: `WashPackage` (+ 3-tier `PackagePricing`), `ServiceBay`, `WashOrder` — see
   `carwash-compile/01-foundation/data-model.md` for the source spec.
@@ -200,12 +202,29 @@ still ahead — see "Not built yet" below.
     `customer_messages` with `status: not_configured`.
   - `GET /api/integrations/status` reports live connection state — shown as a banner on
     `/memberships` — so nothing pretends to be connected when it isn't.
-- **Not built yet** (later phases per the spec's own build order): AI agents (step 6), the
-  wash-sensor/IoT platform, the -3d/-2h reminder jobs (need a scheduler this app doesn't run
-  yet), social/marketing/CRM, the accounting ledger, and HR/payroll — and RBAC only covers
-  this app's existing admin/manager/staff roles, not the spec's full 7-role breakdown
-  (Owner/Site Manager/Bay Attendant/Wash Technician/Detail Technician/Cashier/Fleet Account
-  Manager), which would need its own `Employee` entity.
+- **AI agents** (`carwash-compile/02-intelligence/ai-agents.md`, `server/src/agents/`) —
+  just the highest-leverage piece of `queue-dispatch-agent`, per the deployment guide's own
+  "AI agents, highest-leverage first" ordering. Its mechanical job (assign a queued vehicle
+  to the next open bay) was already deterministic code since Phase 1 — a well-suited task
+  for a rule, not an LLM. What's genuinely judgment-shaped is the spec's own overflow
+  guardrail ("escalates to site-manager if predicted wait exceeds 25 minutes... open
+  self-serve overflow or call in an extra bay-attendant") — a real choice depending on how
+  deep and sustained the backup looks, not a fixed rule. With `ANTHROPIC_API_KEY` set, that
+  specific escalation calls Claude for a one- or two-sentence recommendation folded into the
+  `queue-wait-alert` notification (tagged `[queue-dispatch-agent]`); without it, the same
+  fixed message this app used before agents existed (tagged `[auto]`). The model is never
+  given a tool that can mutate `WashOrder`/`ServiceBay` state — guardrail enforced in code,
+  per the spec's own framing, not just the prompt — its only output is advisory text a human
+  reads.
+- **Not built yet** (later phases per the spec's own build order): the rest of the AI agent
+  roster — `wash-concierge` (a full conversational WhatsApp agent — inbound webhook, session
+  state, tool-use loop — is real scope beyond one discrete judgment call),
+  `membership-billing-agent`, `predictive-maintenance-agent` (needs IoT telemetry), and the
+  rest; the wash-sensor/IoT platform; the -3d/-2h reminder jobs (need a scheduler this app
+  doesn't run yet); social/marketing/CRM; the accounting ledger; and HR/payroll — and RBAC
+  only covers this app's existing admin/manager/staff roles, not the spec's full 7-role
+  breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail Technician/Cashier/Fleet
+  Account Manager), which would need its own `Employee` entity.
 
 ## Responsiveness
 

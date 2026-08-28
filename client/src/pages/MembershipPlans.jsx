@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, Pencil, Trash2, Users2, PauseCircle, PlayCircle, XCircle, CreditCard, MessageCircle } from 'lucide-react'
+import { Plus, Pencil, Trash2, Users2, PauseCircle, PlayCircle, XCircle, CreditCard, MessageCircle, Bot } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { membershipPlansApi, membershipSubscriptionsApi, washPackagesApi, integrationsApi } from '../api/resources'
 import { getErrorMessage } from '../api/client'
@@ -128,6 +128,10 @@ const MembershipPlans = () => {
         <span className="flex items-center gap-1.5 text-sm text-slate-600">
           <MessageCircle size={15} />
           WhatsApp: <Badge status={integrations?.whatsapp?.configured ? 'active' : 'inactive'}>{integrations?.whatsapp?.configured ? 'Connected' : 'Not connected'}</Badge>
+        </span>
+        <span className="flex items-center gap-1.5 text-sm text-slate-600">
+          <Bot size={15} />
+          AI agents: <Badge status={integrations?.agents?.configured ? 'active' : 'inactive'}>{integrations?.agents?.configured ? 'Connected' : 'Deterministic fallback'}</Badge>
         </span>
       </div>
 
