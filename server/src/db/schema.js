@@ -216,6 +216,12 @@ const washOrders = pgTable('wash_orders', {
   price: doublePrecision('price').notNull(),
   // paymentMethod: membership | card | cash | fleet-invoice
   paymentMethod: text('payment_method').notNull().default('cash'),
+  // Set only for paymentMethod=fleet-invoice, once a site-manager confirms the net-15
+  // payment actually arrived (02-intelligence/analytics.md's AR Aging report ages this
+  // against checkedOutAt while it stays null). Nothing else in this app previously modeled
+  // fleet-invoice collection at all — checkout only ever posted the AR debit, never the
+  // matching cash-in entry.
+  fleetInvoiceCollectedAt: timestamp('fleet_invoice_collected_at', { withTimezone: true }),
   promoCode: text('promo_code'),
   createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

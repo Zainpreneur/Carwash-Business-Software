@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
-import { dashboardApi, analyticsApi } from '../api/resources'
+import { dashboardApi, analyticsApi, washOrdersApi } from '../api/resources'
 import { getErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import Spinner from '../components/ui/Spinner'
@@ -155,6 +155,183 @@ const HealthScore = () => {
   )
 }
 
+// The reporting cube's five buildable named reports (02-intelligence/analytics.md) — a
+// generic table renderer driven by each report's own column definition, since the six
+// reports don't share a shape. equipment-uptime-by-asset is the sixth named report and isn't
+// here — it needs a real Asset entity this app doesn't have (same gap healthScoreService's
+// equipment-uptime component documents).
+const REPORTS = {
+  'revenue-by-bay-daily': {
+    label: 'Revenue by Bay (daily)',
+    load: () => analyticsApi.reports.revenueByBayDaily(14),
+    columns: [
+      { key: 'date', label: 'Date' },
+      { key: 'bayNumber', label: 'Bay', format: (v) => `Bay ${v}` },
+      { key: 'washCount', label: 'Washes' },
+      { key: 'revenue', label: 'Revenue', format: currency },
+    ],
+  },
+  'membership-mix-weekly': {
+    label: 'Membership Mix (weekly)',
+    load: () => analyticsApi.reports.membershipMixWeekly(8),
+    columns: [
+      { key: 'week', label: 'Week' },
+      { key: 'paymentMethod', label: 'Payment method', format: (v) => v.replace('-', ' ') },
+      { key: 'washCount', label: 'Washes' },
+      { key: 'revenue', label: 'Revenue', format: currency },
+    ],
+  },
+  'package-tier-margin': {
+    label: 'Package Tier Margin',
+    load: () => analyticsApi.reports.packageTierMargin(),
+    columns: [
+      { key: 'packageName', label: 'Package' },
+      { key: 'washCount', label: 'Washes (30d)' },
+      { key: 'avgRevenuePerWash', label: 'Avg revenue/wash', format: (v) => (v === null ? '—' : currency(v)) },
+      { key: 'chemicalCostPerWash', label: 'Chemical cost/wash', format: currency },
+      { key: 'grossMargin', label: 'Gross margin', format: (v) => (v === null ? '—' : currency(v)) },
+      { key: 'grossMarginPercent', label: 'Margin %', format: (v) => (v === null ? '—' : `${v}%`) },
+    ],
+  },
+  'aov-by-vehicle-type': {
+    label: 'AOV by Vehicle Type',
+    load: () => analyticsApi.reports.aovByVehicleType(30),
+    columns: [
+      { key: 'vehicleType', label: 'Vehicle type', format: (v) => v.charAt(0).toUpperCase() + v.slice(1) },
+      { key: 'washCount', label: 'Washes (30d)' },
+      { key: 'averageOrderValue', label: 'Avg order value', format: currency },
+    ],
+  },
+  'technician-throughput': {
+    label: 'Technician Throughput (weekly)',
+    load: () => analyticsApi.reports.technicianThroughput(8),
+    columns: [
+      { key: 'week', label: 'Week' },
+      { key: 'employeeName', label: 'Technician' },
+      { key: 'washCount', label: 'Washes' },
+      { key: 'hoursWorked', label: 'Hours worked' },
+      { key: 'washesPerHour', label: 'Washes/hour', format: (v) => (v === null ? '—' : v) },
+    ],
+  },
+}
+
+const ReportingCube = () => {
+  const [reportKey, setReportKey] = useState('revenue-by-bay-daily')
+  const [rows, setRows] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    REPORTS[reportKey]
+      .load()
+      .then(setRows)
+      .catch((err) => toast.error(getErrorMessage(err)))
+      .finally(() => setLoading(false))
+  }, [reportKey])
+
+  const report = REPORTS[reportKey]
+
+  return (
+    <div className="card p-4 sm:p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-slate-800">Reporting Cube</h3>
+        <select className="input w-auto py-1.5 text-xs" value={reportKey} onChange={(e) => setReportKey(e.target.value)}>
+          {Object.entries(REPORTS).map(([key, r]) => <option key={key} value={key}>{r.label}</option>)}
+        </select>
+      </div>
+      {loading ? (
+        <Spinner />
+      ) : !rows || rows.length === 0 ? (
+        <EmptyState icon={BarChart3} title="No data yet for this report" />
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>{report.columns.map((c) => <th key={c.key}>{c.label}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={i}>
+                  {report.columns.map((c) => <td key={c.key}>{c.format ? c.format(row[c.key]) : row[c.key]}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// AR Aging (02-intelligence/analytics.md) — fleet invoices only, per the spec's own text
+// ("pay-per-wash and membership are collected at time of service"). "Mark collected" is this
+// phase's own addition (ledgerService.postFleetInvoiceCollection) — nothing in this app
+// previously modeled a fleet invoice's cash actually arriving, so every invoice would have
+// sat in "outstanding" forever with no way to age out.
+const ArAging = () => {
+  const [aging, setAging] = useState(null)
+  const [busyId, setBusyId] = useState(null)
+
+  const load = useCallback(() => {
+    analyticsApi.reports.arAging().then(setAging).catch((err) => toast.error(getErrorMessage(err)))
+  }, [])
+
+  useEffect(load, [load])
+
+  const collect = async (id) => {
+    setBusyId(id)
+    try {
+      await washOrdersApi.collectFleetInvoice(id)
+      toast.success('Marked collected')
+      load()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  if (!aging) return null
+
+  return (
+    <div className="card p-4 sm:p-5">
+      <h3 className="mb-4 text-sm font-semibold text-slate-800">AR Aging (fleet invoices)</h3>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {aging.buckets.map((b) => (
+          <div key={b.key} className="rounded-lg bg-slate-50 p-3 text-center">
+            <p className="text-xs text-slate-500">{b.label}</p>
+            <p className="mt-1 text-lg font-semibold text-slate-900">{currency(b.total)}</p>
+            <p className="text-xs text-slate-400">{b.count} invoice{b.count === 1 ? '' : 's'}</p>
+          </div>
+        ))}
+      </div>
+      {aging.invoices.length === 0 ? (
+        <p className="mt-4 text-xs text-slate-400">No outstanding fleet invoices.</p>
+      ) : (
+        <div className="mt-4 table-wrap">
+          <table>
+            <thead><tr><th>Order #</th><th>Age</th><th>Amount</th><th></th></tr></thead>
+            <tbody>
+              {aging.invoices.map((inv) => (
+                <tr key={inv._id}>
+                  <td className="font-medium text-slate-800">{inv.orderNumber}</td>
+                  <td>{inv.ageDays} days</td>
+                  <td>{currency(inv.price)}</td>
+                  <td className="text-right">
+                    <button disabled={busyId === inv._id} onClick={() => collect(inv._id)} className="btn-secondary py-1 text-xs">
+                      Mark collected
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const Reports = () => {
   const [days, setDays] = useState(30)
   const [chart, setChart] = useState([])
@@ -275,6 +452,9 @@ const Reports = () => {
               )}
             </div>
           </div>
+
+          <ReportingCube />
+          <ArAging />
         </>
       )}
     </div>

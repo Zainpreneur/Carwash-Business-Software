@@ -6,7 +6,7 @@ const { notifyRoles } = require('../utils/notify');
 const { findOpenBay } = require('../utils/bays');
 const { notifyReadyForPickup, checkQueueWaitAlert } = require('../utils/automations');
 const { newCustomerWelcomeDayZero, creditReferralIfFirstWash } = require('../utils/growthAutomations');
-const { postWashOrderCheckout } = require('../services/ledgerService');
+const { postWashOrderCheckout, postFleetInvoiceCollection } = require('../services/ledgerService');
 
 // wash-a-vehicle state machine (carwash-compile/01-foundation/data-model.md), kebab-cased
 // to match this app's convention: Queued=queued, BayAssigned=bay-assigned, InWash=in-wash,
@@ -401,6 +401,32 @@ const checkout = asyncHandler(async (req, res) => {
   await respondUpdated(res, order._id);
 });
 
+// AR collection (02-intelligence/analytics.md's AR Aging report needs a "collected" event to
+// age against, which nothing in this app posted before this phase — see ledgerService's
+// postFleetInvoiceCollection header comment).
+const collectFleetInvoice = asyncHandler(async (req, res) => {
+  const [order] = await db.select().from(washOrders).where(eq(washOrders._id, req.params.id));
+  if (!order) {
+    res.status(404);
+    throw new Error('Wash order not found');
+  }
+  if (order.paymentMethod !== 'fleet-invoice') {
+    res.status(400);
+    throw new Error('Only fleet-invoice orders can be marked collected');
+  }
+  if (order.fleetInvoiceCollectedAt) {
+    res.status(400);
+    throw new Error('Already marked collected');
+  }
+  const [updated] = await db
+    .update(washOrders)
+    .set({ fleetInvoiceCollectedAt: new Date(), updatedAt: new Date() })
+    .where(eq(washOrders._id, order._id))
+    .returning();
+  postFleetInvoiceCollection(order).catch((err) => console.error('[ledger] fleet invoice collection post failed:', err.message));
+  res.json(updated);
+});
+
 const cancelWashOrder = asyncHandler(async (req, res) => {
   const order = await requireStatus(res, req.params.id, ['queued', 'bay-assigned']);
   await db
@@ -431,6 +457,7 @@ module.exports = {
   completeWash,
   qualityCheck,
   checkout,
+  collectFleetInvoice,
   cancelWashOrder,
   deleteWashOrder,
 };

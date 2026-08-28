@@ -167,6 +167,14 @@ export const documentsApi = {
 export const analyticsApi = {
   healthScore: () => apiClient.get('/analytics/health-score').then((r) => r.data),
   updateWeights: (data) => apiClient.patch('/analytics/health-score/weights', data).then((r) => r.data),
+  reports: {
+    revenueByBayDaily: (days) => apiClient.get('/analytics/reports/revenue-by-bay-daily', { params: { days } }).then((r) => r.data),
+    membershipMixWeekly: (weeks) => apiClient.get('/analytics/reports/membership-mix-weekly', { params: { weeks } }).then((r) => r.data),
+    packageTierMargin: () => apiClient.get('/analytics/reports/package-tier-margin').then((r) => r.data),
+    aovByVehicleType: (days) => apiClient.get('/analytics/reports/aov-by-vehicle-type', { params: { days } }).then((r) => r.data),
+    technicianThroughput: (weeks) => apiClient.get('/analytics/reports/technician-throughput', { params: { weeks } }).then((r) => r.data),
+    arAging: () => apiClient.get('/analytics/reports/ar-aging').then((r) => r.data),
+  },
 }
 
 export const ticketsApi = {
@@ -187,6 +195,7 @@ export const washOrdersApi = {
   checkout: (id, paymentMethod) => apiClient.patch(`/wash-orders/${id}/checkout`, { paymentMethod }).then((r) => r.data),
   cancel: (id) => apiClient.patch(`/wash-orders/${id}/cancel`).then((r) => r.data),
   checkoutStats: () => apiClient.get('/wash-orders/checkout-stats').then((r) => r.data),
+  collectFleetInvoice: (id) => apiClient.patch(`/wash-orders/${id}/collect-fleet-invoice`).then((r) => r.data),
 }
 
 export const dashboardApi = {

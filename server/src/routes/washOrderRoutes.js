@@ -10,6 +10,7 @@ const {
   completeWash,
   qualityCheck,
   checkout,
+  collectFleetInvoice,
   cancelWashOrder,
   deleteWashOrder,
 } = require('../controllers/washOrderController');
@@ -30,6 +31,7 @@ router.patch('/:id/start-wash', startWash);
 router.patch('/:id/complete-wash', completeWash);
 router.patch('/:id/qc', qualityCheck);
 router.patch('/:id/checkout', checkout);
+router.patch('/:id/collect-fleet-invoice', authorize('admin', 'manager'), collectFleetInvoice);
 router.patch('/:id/cancel', cancelWashOrder);
 
 module.exports = router;

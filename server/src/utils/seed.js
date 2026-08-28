@@ -28,7 +28,7 @@ const {
   purchaseOrderLines,
   knowledgeArticles,
 } = require('../db/schema');
-const { postWashOrderCheckout, postMembershipCharge, postExpense } = require('../services/ledgerService');
+const { postWashOrderCheckout, postMembershipCharge, postExpense, postFleetInvoiceCollection } = require('../services/ledgerService');
 const { runPayroll } = require('../services/payrollService');
 const { receivePurchaseOrder, closePurchaseOrder, postStockAdjustment } = require('../services/inventoryService');
 const { createPurchaseOrdersFromRecommendations } = require('../agents/inventoryForecasterAgent');
@@ -287,21 +287,64 @@ const run = async () => {
     wo(5, { packageIdx: 2, package: createdPackages[2]._id, status: 'in-wash', queuePosition: 5, bay: bayByNumber.get(5)._id, bookingType: 'appointment', scheduledFor: woDate(9, 0), queuedAt: woDate(8, 55), bayAssignedAt: woDate(9, 0), washStartedAt: woDate(9, 2) }),
     wo(6, { packageIdx: 0, package: createdPackages[0]._id, status: 'quality-check', queuePosition: 6, bay: bayByNumber.get(3)._id, queuedAt: woDate(8, 30), bayAssignedAt: woDate(8, 33), washStartedAt: woDate(8, 35), washCompletedAt: woDate(8, 43) }),
     wo(7, { packageIdx: 3, package: createdPackages[3]._id, status: 'ready-for-pickup', queuePosition: 7, bay: bayByNumber.get(6)._id, bookingType: 'appointment', scheduledFor: woDate(8, 0), queuedAt: woDate(8, 0), bayAssignedAt: woDate(8, 2), washStartedAt: woDate(8, 5), washCompletedAt: woDate(9, 30), qcResult: 'pass' }),
-    wo(8, { packageIdx: 0, package: createdPackages[0]._id, status: 'completed', queuePosition: 8, queuedAt: woDate(7, 40), bayAssignedAt: woDate(7, 42), washStartedAt: woDate(7, 44), washCompletedAt: woDate(7, 52), checkedOutAt: woDate(7, 55), qcResult: 'pass', paymentMethod: 'card' }),
-    wo(9, { packageIdx: 1, package: createdPackages[1]._id, status: 'completed', queuePosition: 9, queuedAt: woDate(7, 10), bayAssignedAt: woDate(7, 12), washStartedAt: woDate(7, 14), washCompletedAt: woDate(7, 24), checkedOutAt: woDate(7, 27), qcResult: 'pass', paymentMethod: 'membership' }),
+    // bay set on these three completed orders (unlike the in-progress ones above, this
+    // doesn't affect the live bay board — that only reflects non-terminal statuses — but it
+    // gives revenue-by-bay-daily (02-intelligence/analytics.md's reporting cube) something
+    // real to group by instead of an empty report on a fresh seed).
+    wo(8, { packageIdx: 0, package: createdPackages[0]._id, status: 'completed', queuePosition: 8, bay: bayByNumber.get(1)._id, queuedAt: woDate(7, 40), bayAssignedAt: woDate(7, 42), washStartedAt: woDate(7, 44), washCompletedAt: woDate(7, 52), checkedOutAt: woDate(7, 55), qcResult: 'pass', paymentMethod: 'card' }),
+    wo(9, { packageIdx: 1, package: createdPackages[1]._id, status: 'completed', queuePosition: 9, bay: bayByNumber.get(2)._id, queuedAt: woDate(7, 10), bayAssignedAt: woDate(7, 12), washStartedAt: woDate(7, 14), washCompletedAt: woDate(7, 24), checkedOutAt: woDate(7, 27), qcResult: 'pass', paymentMethod: 'membership' }),
     wo(10, { packageIdx: 0, package: createdPackages[0]._id, status: 'cancelled', queuePosition: 10, queuedAt: woDate(7, 0) }),
     // Detail-bay, completed, assigned to a detail-technician (Sara Staff — see HR seed data
     // below) so payroll's commission calc has something to compute in the demo.
     wo(11, {
       packageIdx: 3, package: createdPackages[3]._id, status: 'completed', queuePosition: 11,
+      bay: bayByNumber.get(5)._id,
       queuedAt: woDate(6, 0), bayAssignedAt: woDate(6, 2), washStartedAt: woDate(6, 5),
       washCompletedAt: woDate(7, 30), checkedOutAt: woDate(7, 35), qcResult: 'pass',
       paymentMethod: 'card', assignedTechnician: staffMembers[1]._id,
     }),
   ];
+
+  // Three fleet-invoice completed orders at different ages (Isabella Thomas — index 9, the
+  // seeded fleet account) so AR Aging (02-intelligence/analytics.md) has real buckets to show
+  // on a fresh seed instead of an empty report — one in each of current/15-30/45+, the third
+  // already marked collected to demonstrate that half of the workflow too.
+  const fleetCustomer = createdCustomers[9];
+  const fleetVehicle = createdVehicles.find((v) => v.customer === fleetCustomer._id);
+  const daysAgo = (n) => new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+  const fleetOrderSeed = [
+    { n: 12, ageDays: 5, collected: false },
+    { n: 13, ageDays: 22, collected: false },
+    { n: 14, ageDays: 50, collected: true },
+  ].map(({ n, ageDays, collected }) => {
+    const checkedOutAt = daysAgo(ageDays);
+    return {
+      orderNumber: orderNo(n),
+      customer: fleetCustomer._id,
+      vehicle: fleetVehicle._id,
+      package: createdPackages[0]._id,
+      bay: bayByNumber.get(1)._id,
+      bookingType: 'walk-in',
+      status: 'completed',
+      queuePosition: n,
+      queuedAt: checkedOutAt,
+      bayAssignedAt: checkedOutAt,
+      washStartedAt: checkedOutAt,
+      washCompletedAt: checkedOutAt,
+      checkedOutAt,
+      qcResult: 'pass',
+      paymentMethod: 'fleet-invoice',
+      price: priceFor(0, fleetVehicle.type),
+      createdBy: admin._id,
+      fleetInvoiceCollectedAt: collected ? daysAgo(ageDays - 3) : null,
+    };
+  });
+  washOrderSeed.push(...fleetOrderSeed);
+
   const createdWashOrders = await db.insert(washOrders).values(washOrderSeed.map(({ packageIdx, ...row }) => row)).returning();
   for (const order of createdWashOrders) {
     if (order.status === 'completed') await postWashOrderCheckout(order);
+    if (order.paymentMethod === 'fleet-invoice' && order.fleetInvoiceCollectedAt) await postFleetInvoiceCollection(order);
   }
 
   // --- Membership billing (Phase 5 demo data) ---

@@ -142,7 +142,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Growth | `GET /growth/segments/{summary,customers}`, `GET/POST /growth/fleet-inquiries`, `PATCH /growth/fleet-inquiries/:id/status`, `GET/POST /growth/reviews` (admin/manager) |
 | Knowledge Base | `GET /knowledge-base`, `GET /knowledge-base/:id` (any authenticated role), `POST /knowledge-base`, `PATCH/DELETE /knowledge-base/:id` (admin/manager) |
 | Documents | `GET /documents/wash-receipt/:orderId`, `GET /documents/membership-agreement/:subscriptionId`, `GET /documents/wash-package-comparison` (any authenticated role) |
-| Analytics | `GET /analytics/health-score` (admin/manager), `PATCH /analytics/health-score/weights` (admin only) |
+| Analytics | `GET /analytics/health-score` (admin/manager), `PATCH /analytics/health-score/weights` (admin only), `GET /analytics/reports/{revenue-by-bay-daily,membership-mix-weekly,package-tier-margin,aov-by-vehicle-type,technician-throughput,ar-aging}` (admin/manager) |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -174,7 +174,9 @@ real authored Knowledge Base that grounds `wash-concierge`'s FAQ answers instead
 system prompt, plus real generated wash-receipt/membership-agreement/wash-package-comparison
 documents rendered from live records (`carwash-compile/06-platform/knowledge-base.md`), a
 real business health score computed from the spec's own KPI formulas with owner-editable
-weights (`carwash-compile/02-intelligence/analytics.md`), a
+weights, five of the reporting cube's six named reports, and a real AR Aging report backed
+by a genuine fleet-invoice collection workflow that didn't exist before this phase
+(`carwash-compile/02-intelligence/analytics.md`), a
 real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that
 auto-posts from checkout, membership billing, expenses, payroll, and purchasing, a real
 staff roster with scheduling, leave, and a payroll run that posts to that same ledger
@@ -604,13 +606,43 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
     validated server-side to still sum to 1.0.
   - Shown at the top of `/reports` (admin/manager) with a per-component breakdown and an
     "Edit weights" action for admin.
-- **Not built yet**: the reporting cube's other five named reports and full financial
-  statements (P&L/Cash Flow/AR Aging beyond what the existing Finance/Ledger pages already
-  cover), cohort & retention analysis, WoW/MoM/YoY benchmarking, the anomaly-detection rule
-  table, and the scheduled owner/site-manager digests (`02-intelligence/analytics.md`) — a
-  much larger chapter than this one composite score, and one that leans heavily on the
-  scheduler this app doesn't have (see the reminder-jobs gap below) for its "daily"/"weekly"
-  cadences; the rest of the AI agent roster (`predictive-maintenance-agent` and
+- **Reporting cube** (`02-intelligence/analytics.md`'s six named reports,
+  `server/src/services/reportingCubeService.js`) — five of the six, computed from real data
+  already in this app's tables, shown as a report-picker table on `/reports`.
+  - `revenue-by-bay-daily`, `membership-mix-weekly`, `aov-by-vehicle-type` — straightforward
+    groupings of real `WashOrder` history by bay/day, payment method/week, and vehicle
+    type, respectively. Revenue is always price net of its embedded sales tax (the same
+    convention the ledger and business health score already use), never raw `price`.
+  - `package-tier-margin` — `ChemicalCostPerWash` reuses the real per-wash chemical
+    consumption model `inventory-forecaster` already built
+    (`packageSupplyUsage x Supply.unitCost`) rather than re-deriving it; `GrossMargin`
+    subtracts that from each tier's trailing-30-day average revenue per wash.
+  - `technician-throughput` — bir.json pairs this report with a `BayUtilization` measure,
+    which doesn't really describe a person; this app substitutes washes-handled-per-hour
+    from real `Shift` clock-in/out data, documented as its own interpretation of a
+    measure/dimension pairing that doesn't fit a technician literally.
+  - **Not built**: `equipment-uptime-by-asset` — needs a real `Asset` entity with a
+    downtime-hours log (`03-operations/assets-iot.md`), the same gap the health score's
+    equipment-uptime proxy already documents, with no per-Asset breakdown to add on top of a
+    proxy that has no per-Asset granularity to begin with.
+- **AR Aging** (`02-intelligence/analytics.md`'s financial-statements table) — fleet invoices
+  only, per the spec's own text ("pay-per-wash and membership are collected at time of
+  service"). Building this exposed a real gap: nothing in this app previously modeled a fleet
+  invoice's payment actually arriving — checkout only ever posted the Accounts Receivable
+  debit, with no matching cash-in entry, so every fleet invoice would have sat in
+  "outstanding" forever with no way to age out. Fixed with a new
+  `WashOrder.fleetInvoiceCollectedAt` field and a `PATCH
+  /wash-orders/:id/collect-fleet-invoice` action (admin/manager) that posts the missing
+  ledger entry (`ledgerService.postFleetInvoiceCollection`). `/reports`' AR Aging card buckets
+  every uncollected fleet invoice by age (current/15-30/30-45/45+) with a "Mark collected"
+  action per invoice.
+- **Not built yet**: full financial statements beyond what AR Aging plus the existing
+  Finance/Ledger pages now cover (a P&L segmented by the cube's own dimensions, Cash Flow
+  detail), cohort & retention analysis, WoW/MoM/YoY benchmarking, the anomaly-detection rule
+  table, and the scheduled owner/site-manager digests (`02-intelligence/analytics.md`) — all
+  of which lean heavily on the scheduler this app doesn't have (see the reminder-jobs gap
+  below) for their "daily"/"weekly" cadences; the rest of the AI agent roster
+  (`predictive-maintenance-agent` and
   `quality-anomaly-detector` — need IoT telemetry this app has no sensors for; `phone-line-agent`
   — needs a real telephony API); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and
   proactive SLA-breach alerting (need a scheduler this app doesn't run yet) —

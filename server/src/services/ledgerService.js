@@ -116,4 +116,20 @@ const reverseExpense = async (expense) =>
     ],
   });
 
-module.exports = { postEntry, postWashOrderCheckout, postMembershipCharge, postExpense, reverseExpense, TAX_RATE };
+// Fleet net-15 collection (05-finance/accounting.md's AR workflow, 02-intelligence/
+// analytics.md's AR Aging report). A fleet-invoice checkout only ever debited Accounts
+// Receivable (1100) — nothing in this app previously modeled the cash actually arriving, so
+// every fleet invoice would have sat in "outstanding" forever with no way to age out. This is
+// the other half of that entry: cash in, AR cleared, for the exact amount originally billed.
+const postFleetInvoiceCollection = async (order) =>
+  postEntry({
+    memo: `Fleet invoice collected: ${order.orderNumber}`,
+    sourceEntity: 'wash_order',
+    sourceId: order._id,
+    lines: [
+      { account: '1000', debit: round2(Number(order.price)) },
+      { account: '1100', credit: round2(Number(order.price)) },
+    ],
+  });
+
+module.exports = { postEntry, postWashOrderCheckout, postMembershipCharge, postExpense, reverseExpense, postFleetInvoiceCollection, TAX_RATE };
