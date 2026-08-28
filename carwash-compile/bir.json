@@ -1,0 +1,1173 @@
+{
+  "meta": {
+    "businessName": "SplashPoint Express Wash",
+    "category": "car wash (multi-bay express + full-service, with membership plans)",
+    "scale": "single-location",
+    "audience": "B2C",
+    "assumptions": [
+      "Single physical site with 4 express-tunnel/conveyor bays plus 2 full-service detail bays (6 bays total) - 'service bays, technician queues' read as a multi-bay express/full-service hybrid, not a single-bay operation.",
+      "Revenue is a mix of pay-per-wash retail tickets and monthly unlimited membership subscriptions (the dominant modern car-wash business model), plus a small walk-up B2B/fleet segment (local delivery vans, rental-lot vehicles) - not a formal B2B sales org.",
+      "Vehicle types priced in 3 tiers: sedan/coupe, suv-truck, van-oversized (motorcycles/oversized commercial rigs turned away or quoted manually, out of scope).",
+      "Full-service/detail bay work (hand wax, interior detailing) is appointment-capable; express tunnel wash is walk-in/queue only.",
+      "IoT sensors are installed on the highest-value, highest-downtime-cost equipment (tunnel conveyor motor, water reclaim system, boiler, air compressor, dryer blowers) - not on every hand tool.",
+      "The business already has a POS/payment processor and a Google Business Profile; no existing loyalty program to migrate from.",
+      "Located in a single US state for this compile (sales tax + labor law scoped to one jurisdiction) - multi-state/franchise expansion would recompile meta.scale and the tax/HR sections.",
+      "No formal B2B sales pipeline compiled (see crm.md) - fleet/commercial interest is handled via lightweight lead scoring and a human follow-up task, not a staged deal pipeline, per the 'mostly walk-in business' guidance."
+    ],
+    "version": "1.0.0",
+    "compiledAt": "2026-08-28T00:00:00Z"
+  },
+  "ontology": {
+    "coreObjects": [
+      "Customer -> Customer",
+      "Order -> WashOrder",
+      "Location -> ServiceBay",
+      "Subscription -> MembershipSubscription",
+      "Product -> WashPackage"
+    ],
+    "valueFlow": "Customers pay per-visit for a wash package priced by vehicle type, or via a monthly unlimited membership subscription auto-billed to a stored card, with a small fleet/commercial segment billed net-15 on invoice.",
+    "primaryLifecycle": "VehicleQueued -> BayAssigned -> WashCycle -> QualityCheck -> Checkout/MembershipVerified -> VehicleExit"
+  },
+  "entities": [
+    {
+      "id": "Customer",
+      "name": "Customer",
+      "description": "A car wash guest - pay-per-wash retail customer, member, or fleet/commercial account (isFleetAccount flag), all in one entity since a fleet contact is still an individual who signs up the same way.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "fullName", "type": "string", "required": true },
+        { "id": "phone", "type": "string", "required": true, "piiOrSensitive": true },
+        { "id": "email", "type": "string", "piiOrSensitive": true },
+        { "id": "preferredLanguage", "type": "enum", "enumValues": ["en", "es"] },
+        { "id": "marketingConsent", "type": "boolean", "required": true },
+        { "id": "whatsappOptIn", "type": "boolean", "required": true },
+        { "id": "paymentMethodToken", "type": "string", "piiOrSensitive": true },
+        { "id": "loyaltyPoints", "type": "number" },
+        { "id": "isFleetAccount", "type": "boolean" },
+        { "id": "fleetLeadScore", "type": "number" },
+        { "id": "referralCode", "type": "string" },
+        { "id": "referredByCode", "type": "string" }
+      ]
+    },
+    {
+      "id": "Vehicle",
+      "name": "Vehicle",
+      "description": "A vehicle on file for a customer; a membership attaches to a specific vehicle (plate-linked) so the tunnel's plate-recognition camera can verify membership automatically.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "customerId", "type": "relation", "relationTo": "Customer", "required": true },
+        { "id": "vehicleType", "type": "enum", "enumValues": ["sedan-coupe", "suv-truck", "van-oversized"], "required": true },
+        { "id": "licensePlate", "type": "string", "required": true, "piiOrSensitive": true },
+        { "id": "make", "type": "string" },
+        { "id": "model", "type": "string" },
+        { "id": "color", "type": "string" },
+        { "id": "lastWashAt", "type": "datetime" }
+      ]
+    },
+    {
+      "id": "WashPackage",
+      "name": "Wash Package",
+      "description": "A service tier a vehicle can be washed under - the express tunnel line offers the first two tiers, the detail bays offer the top two.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "name", "type": "string", "required": true },
+        { "id": "tier", "type": "enum", "enumValues": ["express-exterior", "exterior-plus", "signature-full-service", "premium-hand-detail"], "required": true },
+        { "id": "deliveryLane", "type": "enum", "enumValues": ["tunnel", "detail-bay"], "required": true },
+        { "id": "includesInterior", "type": "boolean" },
+        { "id": "avgCycleTimeMinutes", "type": "number", "required": true },
+        { "id": "description", "type": "string" }
+      ]
+    },
+    {
+      "id": "PackagePricing",
+      "name": "Package Pricing",
+      "description": "Join entity: price of a WashPackage varies by vehicle size, since a van/oversized vehicle costs more in chemical and tunnel time than a sedan.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "packageId", "type": "relation", "relationTo": "WashPackage", "required": true },
+        { "id": "vehicleType", "type": "enum", "enumValues": ["sedan-coupe", "suv-truck", "van-oversized"], "required": true },
+        { "id": "price", "type": "money", "required": true }
+      ]
+    },
+    {
+      "id": "MembershipPlan",
+      "name": "Membership Plan",
+      "description": "An unlimited-wash monthly subscription tier. This is the dominant revenue driver in modern express car washes, not a side loyalty feature.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "name", "type": "string", "required": true },
+        { "id": "tier", "type": "enum", "enumValues": ["basic-unlimited", "premium-unlimited", "fleet-unlimited"], "required": true },
+        { "id": "coveredPackageId", "type": "relation", "relationTo": "WashPackage", "required": true },
+        { "id": "monthlyPrice", "type": "money", "required": true },
+        { "id": "isUnlimited", "type": "boolean", "required": true },
+        { "id": "washesPerMonthCap", "type": "number" },
+        { "id": "rolloverAllowed", "type": "boolean" }
+      ]
+    },
+    {
+      "id": "MembershipSubscription",
+      "name": "Membership Subscription",
+      "description": "A specific customer+vehicle enrolled in a plan, plate-linked for tunnel entry verification.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "customerId", "type": "relation", "relationTo": "Customer", "required": true },
+        { "id": "vehicleId", "type": "relation", "relationTo": "Vehicle", "required": true },
+        { "id": "planId", "type": "relation", "relationTo": "MembershipPlan", "required": true },
+        { "id": "billingDayOfMonth", "type": "number", "required": true },
+        { "id": "nextBillingDate", "type": "date" },
+        { "id": "pausedUntil", "type": "date" },
+        { "id": "washesThisCycle", "type": "number" },
+        { "id": "failedPaymentAttempts", "type": "number" }
+      ],
+      "states": ["Active", "PastDue", "Paused", "Suspended", "Cancelled"],
+      "transitions": [
+        { "from": "Active", "to": "PastDue", "trigger": "billing-charge-failed" },
+        { "from": "PastDue", "to": "Active", "trigger": "payment-retry-succeeded" },
+        { "from": "PastDue", "to": "Suspended", "trigger": "past-due-7-days-unresolved" },
+        { "from": "Suspended", "to": "Cancelled", "trigger": "suspended-30-days-no-payment" },
+        { "from": "Suspended", "to": "Active", "trigger": "payment-collected-manually" },
+        { "from": "Active", "to": "Paused", "trigger": "customer-requested-pause" },
+        { "from": "Paused", "to": "Active", "trigger": "pause-period-ended" },
+        { "from": "Active", "to": "Cancelled", "trigger": "customer-cancelled" }
+      ]
+    },
+    {
+      "id": "ServiceBay",
+      "name": "Service Bay",
+      "description": "A physical wash lane or detail bay. The tunnel is 1 continuous conveyor lane counted as bays 1-4 (positions along the line); detail bays 5-6 are discrete stalls.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "bayNumber", "type": "number", "required": true },
+        { "id": "bayType", "type": "enum", "enumValues": ["tunnel-conveyor", "detail-bay"], "required": true },
+        { "id": "operationalStatus", "type": "enum", "enumValues": ["operational", "degraded", "down", "retired"], "required": true },
+        { "id": "currentWashOrderId", "type": "relation", "relationTo": "WashOrder" },
+        { "id": "avgThroughputPerHour", "type": "number" }
+      ]
+    },
+    {
+      "id": "WashOrder",
+      "name": "Wash Order",
+      "description": "One vehicle's trip through the wash - the primary lifecycle entity. Everything else (queue, IoT downtime cost, membership verification, analytics) hangs off this.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "customerId", "type": "relation", "relationTo": "Customer" },
+        { "id": "vehicleId", "type": "relation", "relationTo": "Vehicle", "required": true },
+        { "id": "packageId", "type": "relation", "relationTo": "WashPackage", "required": true },
+        { "id": "subscriptionId", "type": "relation", "relationTo": "MembershipSubscription" },
+        { "id": "bayId", "type": "relation", "relationTo": "ServiceBay" },
+        { "id": "assignedTechnicianId", "type": "relation", "relationTo": "Employee" },
+        { "id": "bookingType", "type": "enum", "enumValues": ["walk-in", "appointment"], "required": true },
+        { "id": "scheduledFor", "type": "datetime" },
+        { "id": "queuePosition", "type": "number" },
+        { "id": "queuedAt", "type": "datetime", "required": true },
+        { "id": "bayAssignedAt", "type": "datetime" },
+        { "id": "washStartedAt", "type": "datetime" },
+        { "id": "washCompletedAt", "type": "datetime" },
+        { "id": "qcResult", "type": "enum", "enumValues": ["pass", "fail"] },
+        { "id": "price", "type": "money", "required": true },
+        { "id": "paymentMethod", "type": "enum", "enumValues": ["membership", "card", "cash", "fleet-invoice"] },
+        { "id": "promoCode", "type": "string" }
+      ],
+      "states": ["Queued", "BayAssigned", "InWash", "QualityCheck", "ReadyForPickup", "Completed", "Cancelled"],
+      "transitions": [
+        { "from": "Queued", "to": "BayAssigned", "trigger": "bay-assigned" },
+        { "from": "BayAssigned", "to": "InWash", "trigger": "wash-cycle-started" },
+        { "from": "InWash", "to": "QualityCheck", "trigger": "wash-cycle-complete" },
+        { "from": "QualityCheck", "to": "ReadyForPickup", "trigger": "qc-passed" },
+        { "from": "QualityCheck", "to": "InWash", "trigger": "qc-failed-rework" },
+        { "from": "ReadyForPickup", "to": "Completed", "trigger": "checkout-confirmed" },
+        { "from": "Queued", "to": "Cancelled", "trigger": "customer-cancelled" },
+        { "from": "BayAssigned", "to": "Cancelled", "trigger": "no-show" }
+      ]
+    },
+    {
+      "id": "Employee",
+      "name": "Employee",
+      "description": "HR record for a staff member, distinct from the RBAC role they log in as.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "fullName", "type": "string", "required": true },
+        { "id": "role", "type": "enum", "enumValues": ["site-manager", "bay-attendant", "wash-technician", "detail-technician", "cashier", "fleet-account-manager"], "required": true },
+        { "id": "hireDate", "type": "date", "required": true },
+        { "id": "hourlyRate", "type": "money", "piiOrSensitive": true },
+        { "id": "certifications", "type": "json" },
+        { "id": "emergencyContact", "type": "string", "piiOrSensitive": true },
+        { "id": "employmentStatus", "type": "enum", "enumValues": ["applicant", "hired", "onboarding", "active", "on-leave", "offboarded"], "required": true }
+      ]
+    },
+    {
+      "id": "Shift",
+      "name": "Shift",
+      "description": "A scheduled block of an employee's time, optionally pinned to a bay/lane.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "employeeId", "type": "relation", "relationTo": "Employee", "required": true },
+        { "id": "bayId", "type": "relation", "relationTo": "ServiceBay" },
+        { "id": "startTime", "type": "datetime", "required": true },
+        { "id": "endTime", "type": "datetime", "required": true },
+        { "id": "status", "type": "enum", "enumValues": ["scheduled", "confirmed", "no-show", "completed"], "required": true }
+      ]
+    },
+    {
+      "id": "Asset",
+      "name": "Asset",
+      "description": "Durable wash equipment - distinct from consumable Supply. This is what the IoT/predictive-maintenance layer watches.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "assetType", "type": "enum", "enumValues": ["tunnel-conveyor-motor", "foam-applicator-arch", "water-reclaim-ro-system", "air-compressor", "water-heater-boiler", "dryer-blower-bank", "vacuum-station"], "required": true },
+        { "id": "bayId", "type": "relation", "relationTo": "ServiceBay" },
+        { "id": "status", "type": "enum", "enumValues": ["operational", "degraded", "down", "retired"], "required": true },
+        { "id": "purchaseDate", "type": "date" },
+        { "id": "warrantyExpiry", "type": "date" }
+      ]
+    },
+    {
+      "id": "MaintenanceOrder",
+      "name": "Maintenance Order",
+      "description": "A tracked work order for asset service, triggered either by a fixed preventive schedule or by the predictive-maintenance agent reading telemetry drift.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "assetId", "type": "relation", "relationTo": "Asset", "required": true },
+        { "id": "triggeredBy", "type": "enum", "enumValues": ["scheduled", "predictive"], "required": true },
+        { "id": "triggeringSignal", "type": "string" },
+        { "id": "technicianId", "type": "relation", "relationTo": "Employee" },
+        { "id": "partsUsed", "type": "json" },
+        { "id": "estimatedDowntimeCost", "type": "money" }
+      ],
+      "states": ["Requested", "PartsPending", "Scheduled", "InProgress", "Completed"],
+      "transitions": [
+        { "from": "Requested", "to": "PartsPending", "trigger": "parts-needed-not-in-stock" },
+        { "from": "Requested", "to": "Scheduled", "trigger": "parts-in-stock-scheduled" },
+        { "from": "PartsPending", "to": "Scheduled", "trigger": "parts-received" },
+        { "from": "Scheduled", "to": "InProgress", "trigger": "technician-started" },
+        { "from": "InProgress", "to": "Completed", "trigger": "service-completed" }
+      ]
+    },
+    {
+      "id": "Supply",
+      "name": "Supply Item",
+      "description": "A consumable used per wash - chemicals and disposables. Distinct from Asset.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "name", "type": "string", "required": true },
+        { "id": "category", "type": "enum", "enumValues": ["soap-detergent", "wax-sealant", "tire-shine", "microfiber-towels", "air-freshener", "interior-cleaner", "reclaim-filter-media"], "required": true },
+        { "id": "unit", "type": "enum", "enumValues": ["gallon", "case", "each"], "required": true },
+        { "id": "reorderThreshold", "type": "number", "required": true },
+        { "id": "costPerUnit", "type": "money" }
+      ]
+    },
+    {
+      "id": "Warehouse",
+      "name": "Warehouse",
+      "description": "A stock-holding location on site (this is a single-location business, so these are storage rooms, not branches).",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "name", "type": "string", "required": true }
+      ]
+    },
+    {
+      "id": "Stock",
+      "name": "Stock",
+      "description": "Item x Warehouse -> quantity on hand.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "itemId", "type": "relation", "relationTo": "Supply", "required": true },
+        { "id": "warehouseId", "type": "relation", "relationTo": "Warehouse", "required": true },
+        { "id": "quantity", "type": "number", "required": true }
+      ]
+    },
+    {
+      "id": "Supplier",
+      "name": "Supplier",
+      "description": "A chemical/parts vendor.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "name", "type": "string", "required": true },
+        { "id": "leadTimeDays", "type": "number", "required": true }
+      ]
+    },
+    {
+      "id": "PurchaseOrder",
+      "name": "Purchase Order",
+      "description": "An order to a supplier for chemicals, towels, or equipment parts.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "supplierId", "type": "relation", "relationTo": "Supplier", "required": true },
+        { "id": "lineItems", "type": "json", "required": true },
+        { "id": "orderedAt", "type": "datetime" },
+        { "id": "expectedDate", "type": "date" },
+        { "id": "totalCost", "type": "money", "required": true }
+      ],
+      "states": ["Draft", "Sent", "PartiallyReceived", "Received", "Closed"],
+      "transitions": [
+        { "from": "Draft", "to": "Sent", "trigger": "po-sent-to-supplier" },
+        { "from": "Sent", "to": "PartiallyReceived", "trigger": "partial-shipment-received" },
+        { "from": "Sent", "to": "Received", "trigger": "full-shipment-received" },
+        { "from": "PartiallyReceived", "to": "Received", "trigger": "remaining-shipment-received" },
+        { "from": "Received", "to": "Closed", "trigger": "po-reconciled" }
+      ]
+    },
+    {
+      "id": "StockAdjustment",
+      "name": "Stock Adjustment",
+      "description": "Shrinkage/write-off record - spillage, breakage, expired reclaim filter media, theft.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "itemId", "type": "relation", "relationTo": "Supply", "required": true },
+        { "id": "warehouseId", "type": "relation", "relationTo": "Warehouse", "required": true },
+        { "id": "quantityChange", "type": "number", "required": true },
+        { "id": "reasonCode", "type": "enum", "enumValues": ["breakage", "spillage", "theft", "expired", "count-correction"], "required": true },
+        { "id": "approvedBy", "type": "relation", "relationTo": "Employee", "required": true }
+      ]
+    },
+    {
+      "id": "Invoice",
+      "name": "Invoice",
+      "description": "A billable document - membership charges, per-wash card/cash receipts (auto-paid), and fleet net-15 invoices.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "customerId", "type": "relation", "relationTo": "Customer", "required": true },
+        { "id": "washOrderId", "type": "relation", "relationTo": "WashOrder" },
+        { "id": "subscriptionId", "type": "relation", "relationTo": "MembershipSubscription" },
+        { "id": "amount", "type": "money", "required": true },
+        { "id": "dueDate", "type": "date" }
+      ],
+      "states": ["Draft", "Sent", "Paid", "Overdue", "Void"],
+      "transitions": [
+        { "from": "Draft", "to": "Sent", "trigger": "invoice-issued" },
+        { "from": "Sent", "to": "Paid", "trigger": "payment-received" },
+        { "from": "Sent", "to": "Overdue", "trigger": "due-date-passed-unpaid" },
+        { "from": "Overdue", "to": "Paid", "trigger": "payment-received-late" },
+        { "from": "Sent", "to": "Void", "trigger": "invoice-voided" }
+      ]
+    },
+    {
+      "id": "Payment",
+      "name": "Payment",
+      "description": "A processed payment - one-off card/cash/ACH at checkout, or a recurring membership charge.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "invoiceId", "type": "relation", "relationTo": "Invoice" },
+        { "id": "subscriptionId", "type": "relation", "relationTo": "MembershipSubscription" },
+        { "id": "amount", "type": "money", "required": true },
+        { "id": "method", "type": "enum", "enumValues": ["card", "cash", "ach", "apple-pay", "google-pay"], "required": true },
+        { "id": "processorTxnId", "type": "string", "piiOrSensitive": true },
+        { "id": "paidAt", "type": "datetime", "required": true }
+      ]
+    },
+    {
+      "id": "JournalEntry",
+      "name": "Journal Entry",
+      "description": "Double-entry ledger header, auto-posted from workflow events.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "date", "type": "date", "required": true },
+        { "id": "memo", "type": "string" },
+        { "id": "sourceEntity", "type": "string", "required": true },
+        { "id": "sourceId", "type": "string", "required": true }
+      ]
+    },
+    {
+      "id": "JournalLine",
+      "name": "Journal Line",
+      "description": "One debit or credit line of a JournalEntry.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "journalEntryId", "type": "relation", "relationTo": "JournalEntry", "required": true },
+        { "id": "accountCode", "type": "string", "required": true },
+        { "id": "debit", "type": "money" },
+        { "id": "credit", "type": "money" }
+      ]
+    },
+    {
+      "id": "Ticket",
+      "name": "Support Ticket",
+      "description": "A customer complaint or question - damage claims, billing disputes, membership questions.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "customerId", "type": "relation", "relationTo": "Customer", "required": true },
+        { "id": "washOrderId", "type": "relation", "relationTo": "WashOrder" },
+        { "id": "subject", "type": "string", "required": true },
+        { "id": "category", "type": "enum", "enumValues": ["damage-claim", "billing-dispute", "quality-complaint", "membership-question", "general"], "required": true },
+        { "id": "priority", "type": "enum", "enumValues": ["low", "normal", "high", "urgent"], "required": true }
+      ],
+      "states": ["Open", "InProgress", "WaitingOnCustomer", "Resolved", "Closed"],
+      "transitions": [
+        { "from": "Open", "to": "InProgress", "trigger": "assigned-to-staff" },
+        { "from": "InProgress", "to": "WaitingOnCustomer", "trigger": "awaiting-customer-response" },
+        { "from": "WaitingOnCustomer", "to": "InProgress", "trigger": "customer-responded" },
+        { "from": "InProgress", "to": "Resolved", "trigger": "issue-resolved" },
+        { "from": "Resolved", "to": "Closed", "trigger": "closed-after-grace-period" },
+        { "from": "WaitingOnCustomer", "to": "Closed", "trigger": "no-response-14-days" }
+      ]
+    },
+    {
+      "id": "SocialPost",
+      "name": "Social Post",
+      "description": "A content-calendar entry for the social suite.",
+      "fields": [
+        { "id": "id", "type": "string", "required": true },
+        { "id": "platform", "type": "string", "required": true },
+        { "id": "pillar", "type": "string" },
+        { "id": "scheduledFor", "type": "datetime" },
+        { "id": "status", "type": "enum", "enumValues": ["draft", "pending-approval", "scheduled", "published"], "required": true },
+        { "id": "assetRefs", "type": "json" },
+        { "id": "caption", "type": "string" }
+      ]
+    }
+  ],
+  "roles": [
+    { "id": "owner", "name": "Owner", "description": "Sole proprietor/principal.", "isHuman": true, "isCustomerFacing": false },
+    { "id": "site-manager", "name": "Site Manager", "description": "Runs daily operations for the location.", "isHuman": true, "isCustomerFacing": true },
+    { "id": "bay-attendant", "name": "Bay Attendant", "description": "Greets vehicles, loads the tunnel, directs queue.", "isHuman": true, "isCustomerFacing": true },
+    { "id": "wash-technician", "name": "Wash Technician", "description": "Operates tunnel controls and express-lane wash quality.", "isHuman": true, "isCustomerFacing": true },
+    { "id": "detail-technician", "name": "Detail Technician", "description": "Hand-wax and interior detailing in the detail bays.", "isHuman": true, "isCustomerFacing": true },
+    { "id": "cashier", "name": "Cashier", "description": "Front kiosk - checkout, membership sign-up.", "isHuman": true, "isCustomerFacing": true },
+    { "id": "fleet-account-manager", "name": "Fleet Account Manager", "description": "Part-time role handling the small commercial/fleet segment.", "isHuman": true, "isCustomerFacing": true },
+    { "id": "ops-orchestrator", "name": "Ops Orchestrator Agent", "isHuman": false, "isCustomerFacing": false },
+    { "id": "strategy-advisor", "name": "Strategy Advisor Agent", "isHuman": false, "isCustomerFacing": false },
+    { "id": "system-health-agent", "name": "System Health Agent", "isHuman": false, "isCustomerFacing": false },
+    { "id": "queue-dispatch-agent", "name": "Queue Dispatch Agent", "isHuman": false, "isCustomerFacing": false },
+    { "id": "wash-concierge", "name": "Wash Concierge Agent", "isHuman": false, "isCustomerFacing": true },
+    { "id": "membership-billing-agent", "name": "Membership Billing Agent", "isHuman": false, "isCustomerFacing": false },
+    { "id": "inventory-forecaster", "name": "Inventory Forecaster Agent", "isHuman": false, "isCustomerFacing": false },
+    { "id": "predictive-maintenance-agent", "name": "Predictive Maintenance Agent", "isHuman": false, "isCustomerFacing": false },
+    { "id": "quality-anomaly-detector", "name": "Quality Anomaly Detector", "isHuman": false, "isCustomerFacing": false },
+    { "id": "review-response-agent", "name": "Review Response Agent", "isHuman": false, "isCustomerFacing": true },
+    { "id": "fleet-lead-scorer", "name": "Fleet Lead Scorer", "isHuman": false, "isCustomerFacing": false },
+    { "id": "phone-line-agent", "name": "Phone Line Agent", "isHuman": false, "isCustomerFacing": true }
+  ],
+  "workflows": [
+    {
+      "id": "wash-a-vehicle",
+      "name": "Wash a Vehicle (primary lifecycle)",
+      "trigger": "Vehicle arrives on site (walk-in) or an appointment's scheduled time is reached",
+      "steps": [
+        { "id": "queue-entry", "actor": "bay-attendant", "action": "Log vehicle, select package, verify membership plate or take payment method", "entity": "WashOrder", "onFailure": "If plate lookup fails, attendant manually searches by phone/name; if no match, treats as new walk-in" },
+        { "id": "auto-assign-bay", "actor": "queue-dispatch-agent", "action": "Assign next open bay/technician balancing queue length and package-to-lane fit (detail packages only to detail bays)", "entity": "WashOrder", "onFailure": "If no bay opens within 10 minutes, escalate to site-manager to consider opening the self-serve overflow area" },
+        { "id": "run-wash-cycle", "actor": "wash-technician", "action": "Load vehicle into tunnel or begin detail-bay service", "entity": "WashOrder", "onFailure": "Cycle stall or equipment fault triggers bay-down-alert automation and reroutes queued vehicles" },
+        { "id": "quality-check", "actor": "wash-technician", "action": "Visual QC against the package's checklist (streaks, missed spots, interior if included)", "entity": "WashOrder", "onFailure": "qc-failed-rework transition sends vehicle back through InWash at no extra charge" },
+        { "id": "checkout", "actor": "cashier", "action": "Confirm membership verification or collect payment", "entity": "WashOrder", "onFailure": "Card decline routes to a manual retry or cash fallback before marking Completed" },
+        { "id": "notify-ready", "actor": "wash-concierge", "action": "Send ready-for-pickup notification if the customer opted into WhatsApp/SMS", "entity": "WashOrder", "onFailure": "Silently skip if no opt-in on file - not a hard failure" }
+      ]
+    },
+    {
+      "id": "enroll-membership",
+      "name": "Enroll in a Membership Plan",
+      "trigger": "Customer signs up for an unlimited plan (at kiosk, via WhatsApp, or online)",
+      "steps": [
+        { "id": "capture-vehicle-payment", "actor": "cashier", "action": "Capture vehicle plate and store a payment method token", "entity": "MembershipSubscription", "onFailure": "Decline card entry blocks activation until a valid method is provided" },
+        { "id": "create-subscription", "actor": "cashier", "action": "Create MembershipSubscription in Active state, set billing day", "entity": "MembershipSubscription", "onFailure": "n/a" },
+        { "id": "welcome-message", "actor": "wash-concierge", "action": "Send welcome message with plan terms and how plate verification works at the tunnel entry", "entity": "MembershipSubscription", "onFailure": "Log and retry once if send fails" }
+      ]
+    },
+    {
+      "id": "cancel-refund-wash",
+      "name": "Cancellation / Rework / Refund",
+      "trigger": "Customer requests a cancellation before wash starts, or disputes wash quality after checkout",
+      "steps": [
+        { "id": "pre-wash-cancel", "actor": "bay-attendant", "action": "Cancel WashOrder if still Queued or BayAssigned, no charge", "entity": "WashOrder", "onFailure": "n/a" },
+        { "id": "post-wash-dispute", "actor": "wash-concierge", "action": "Offer a free rework wash within the guardrail; open a Ticket for anything beyond a rework (damage claim, refund request)", "entity": "Ticket", "onFailure": "Escalate to site-manager if customer is unsatisfied with the offered rework" },
+        { "id": "refund-approval", "actor": "site-manager", "action": "Approve and process any refund over the agent's autonomous threshold", "entity": "Payment", "onFailure": "If unactioned, the Ticket's SLA-breach reminder escalates further before the SLA is actually missed" }
+      ]
+    },
+    {
+      "id": "onboard-employee",
+      "name": "Staff Onboarding",
+      "trigger": "A new hire's start date arrives",
+      "steps": [
+        { "id": "create-employee-record", "actor": "site-manager", "action": "Create Employee record, assign role and certifications needed", "entity": "Employee", "onFailure": "n/a" },
+        { "id": "schedule-first-shift", "actor": "site-manager", "action": "Create first Shift paired with a senior technician for training", "entity": "Shift", "onFailure": "n/a" },
+        { "id": "grant-access", "actor": "site-manager", "action": "Assign RBAC role/permissions per 10-security-rbac-abac.md", "entity": "Employee", "onFailure": "n/a" }
+      ]
+    },
+    {
+      "id": "reorder-supplies",
+      "name": "Inventory Reorder",
+      "trigger": "Supply stock crosses reorderThreshold, or the nightly forecast run",
+      "steps": [
+        { "id": "forecast-check", "actor": "inventory-forecaster", "action": "Project consumption from rolling wash-volume and package mix, draft a PurchaseOrder", "entity": "PurchaseOrder", "onFailure": "n/a" },
+        { "id": "approve-po", "actor": "site-manager", "action": "Approve PO above the agent's autonomous spend threshold", "entity": "PurchaseOrder", "onFailure": "PO stays in Draft until approved or edited" },
+        { "id": "receive-stock", "actor": "bay-attendant", "action": "Receive shipment, update Stock, mark PO Received", "entity": "Stock", "onFailure": "Partial shipment sets PurchaseOrder to PartiallyReceived" }
+      ]
+    },
+    {
+      "id": "escalate-complaint",
+      "name": "Escalation / Complaint Handling",
+      "trigger": "A negative review, a damage claim, or a WhatsApp message with negative sentiment",
+      "steps": [
+        { "id": "detect", "actor": "review-response-agent", "action": "Classify sentiment/category and open a Ticket for anything beyond a simple thank-you-worthy positive mention", "entity": "Ticket", "onFailure": "n/a" },
+        { "id": "human-review", "actor": "site-manager", "action": "Review and respond to the customer directly for damage claims and negative reviews", "entity": "Ticket", "onFailure": "SLA breach reminder fires if untouched past the target" }
+      ]
+    },
+    {
+      "id": "predictive-maintenance-cycle",
+      "name": "Predictive Maintenance",
+      "trigger": "IoT telemetry on a monitored Asset drifts outside its normal operating range",
+      "steps": [
+        { "id": "detect-drift", "actor": "predictive-maintenance-agent", "action": "Compare live telemetry trend to the asset's learned normal range, distinguish slow drift from a sudden spike", "entity": "Asset", "onFailure": "n/a" },
+        { "id": "open-work-order", "actor": "predictive-maintenance-agent", "action": "Auto-create a MaintenanceOrder, pull parts from Stock or generate a PurchaseOrder if short", "entity": "MaintenanceOrder", "onFailure": "n/a" },
+        { "id": "confirm-offline", "actor": "site-manager", "action": "Confirm taking the asset offline during business hours (skipped if already failed/unsafe)", "entity": "Asset", "onFailure": "n/a" },
+        { "id": "service", "actor": "wash-technician", "action": "Perform the repair, log partsUsed, mark MaintenanceOrder Completed", "entity": "MaintenanceOrder", "onFailure": "If the repair doesn't resolve the flagged fault, MaintenanceOrder reopens to Scheduled with an escalation note; a second failed attempt notifies site-manager directly" }
+      ]
+    }
+  ],
+  "kpis": [
+    { "id": "cars-washed-per-day", "name": "Cars Washed per Day", "formula": "count(WashOrder where status = Completed, grouped by day)", "targetRoles": ["owner", "site-manager"] },
+    { "id": "bay-utilization-rate", "name": "Bay Utilization Rate", "formula": "sum(WashOrder.washCompletedAt - washStartedAt) / (operational hours x bay count)", "targetRoles": ["site-manager", "owner"] },
+    { "id": "avg-wait-time-minutes", "name": "Average Queue Wait Time", "formula": "avg(WashOrder.bayAssignedAt - queuedAt) in minutes", "targetRoles": ["site-manager", "bay-attendant"] },
+    { "id": "membership-penetration-rate", "name": "Membership Penetration Rate", "formula": "count(WashOrder where paymentMethod = membership) / count(WashOrder), trailing 30 days", "targetRoles": ["owner", "site-manager"] },
+    { "id": "revenue-per-vehicle", "name": "Blended Revenue per Vehicle", "formula": "sum(WashOrder.price) / count(WashOrder) -- for membership washes, price is the plan's amortized per-visit value, see analytics.md", "targetRoles": ["owner"] },
+    { "id": "wash-through-rate", "name": "Wash-Through Rate", "formula": "avg(MembershipSubscription.washesThisCycle) per active subscription per month", "targetRoles": ["owner", "site-manager"] },
+    { "id": "net-membership-growth", "name": "Net Membership Growth", "formula": "count(MembershipSubscription: Active entries this month) - count(Cancelled this month)", "targetRoles": ["owner"] },
+    { "id": "chemical-cost-per-wash", "name": "Chemical Cost per Wash", "formula": "sum(Supply.costPerUnit x consumption) / count(WashOrder), trailing 30 days", "targetRoles": ["site-manager", "owner"] },
+    { "id": "equipment-uptime-rate", "name": "Equipment Uptime Rate", "formula": "1 - (sum(Asset downtime hours) / (Asset count x operational hours)), trailing 30 days", "targetRoles": ["site-manager", "owner"] },
+    { "id": "avg-review-rating", "name": "Average Review Rating", "formula": "avg(external review rating) across Google/Yelp, trailing 90 days", "targetRoles": ["owner", "site-manager"] },
+    { "id": "technician-utilization", "name": "Technician Utilization", "formula": "sum(active wash-cycle minutes assigned) / sum(Shift scheduled minutes) per technician", "targetRoles": ["site-manager"] }
+  ],
+  "aiAgents": [
+    {
+      "id": "ops-orchestrator",
+      "name": "Ops Orchestrator",
+      "purpose": "Holds the day's operating picture across the wash floor (queue depth, bay status, staffing, open escalations) and routes work to the right specialist agent rather than each agent polling blind.",
+      "tier": "orchestrator",
+      "tools": ["WashOrder.read", "ServiceBay.read", "Shift.read", "notify_role", "analytics.query"],
+      "triggers": ["Every 5 minutes during operating hours", "Any specialist agent escalation"],
+      "entitiesTouched": ["WashOrder", "ServiceBay", "Shift"],
+      "guardrails": ["Never overrides a specialist agent's guardrail (e.g. cannot approve a refund on membership-billing-agent's behalf) - routing only, no independent transactional authority."],
+      "escalatesTo": "site-manager"
+    },
+    {
+      "id": "strategy-advisor",
+      "name": "Strategy Advisor",
+      "tier": "advisor",
+      "reportsTo": "ops-orchestrator",
+      "purpose": "Answers open-ended owner questions (\"should we add a 5th tunnel bay\", \"why did membership churn spike in July\", \"is the premium tier worth the price gap\") with a structured, traceable recommendation rather than a bare opinion.",
+      "tools": ["analytics.query", "financial_model", "web_search", "Asset.read", "MembershipSubscription.read"],
+      "reasoningPatterns": ["unit-economics", "scenario-comparison", "root-cause-5-whys", "decision-matrix"],
+      "memory": "Remembers prior recommendations and their stated confidence for 12 months, so it flags rather than silently contradicts an earlier stance.",
+      "triggers": ["Owner asks a question via the Executive View or WhatsApp", "A health-score or anomaly alert crosses a severity threshold worth investigating"],
+      "entitiesTouched": ["WashOrder", "MembershipSubscription", "Asset", "Employee"],
+      "guardrails": ["Never commits to a lease, hire, price change, or equipment purchase - output is always a recommendation with confidence and a suggested cheap experiment (e.g. 'trial the price increase on new sign-ups only for 30 days before repricing existing members'), routed to owner."],
+      "escalatesTo": "owner"
+    },
+    {
+      "id": "system-health-agent",
+      "name": "System Health Agent",
+      "tier": "advisor",
+      "reportsTo": "ops-orchestrator",
+      "purpose": "Watches the AI workforce's own operating data (escalation rates, automation failure rates, anomaly-rule firing frequency, message-stacking) and produces a weekly health report with concrete threshold fixes - it never touches customers or transactional entities.",
+      "tools": ["agent_metrics.read", "analytics.query", "notify_role"],
+      "reasoningPatterns": ["root-cause-5-whys"],
+      "triggers": ["Weekly schedule, Monday 6am before the site opens"],
+      "entitiesTouched": [],
+      "guardrails": ["Recommends threshold/config changes only - never self-modifies another agent's guardrails; all changes route through escalatesTo for a human decision."],
+      "escalatesTo": "site-manager"
+    },
+    {
+      "id": "queue-dispatch-agent",
+      "name": "Queue Dispatch Agent",
+      "tier": "specialist",
+      "purpose": "Assigns each queued vehicle to the next appropriate open bay (respecting tunnel-vs-detail-bay package fit) and technician, and predicts wait time so the concierge can tell a customer a real number.",
+      "tools": ["WashOrder.read", "WashOrder.update", "ServiceBay.read", "Employee.read", "whatsapp.send", "analytics.query"],
+      "triggers": ["WashOrder created (Queued)", "ServiceBay.currentWashOrderId clears (bay becomes free)", "Asset status change on a bay's equipment"],
+      "entitiesTouched": ["WashOrder", "ServiceBay"],
+      "guardrails": ["Never reprioritizes a fleet vehicle ahead of an earlier-queued walk-in without an explicit fleet SLA rule on file.", "Escalates to site-manager if predicted wait exceeds 25 minutes for 3 consecutive vehicles (open self-serve overflow or call in an extra bay-attendant)."],
+      "escalatesTo": "site-manager"
+    },
+    {
+      "id": "wash-concierge",
+      "name": "Wash Concierge",
+      "tier": "specialist",
+      "purpose": "Handles membership sign-up, order-status lookup (\"where's my car\"), rebooking a detail appointment, and FAQ (guarantee/rework policy, hours, pricing) over WhatsApp.",
+      "tools": ["whatsapp.send", "WashOrder.read", "MembershipSubscription.read", "MembershipSubscription.create", "MembershipPlan.read", "knowledge_base.search", "automation.trigger"],
+      "triggers": ["Inbound WhatsApp message", "WashOrder status change for an opted-in customer"],
+      "entitiesTouched": ["WashOrder", "Customer", "MembershipSubscription", "Ticket"],
+      "guardrails": ["Never modifies pricing.", "Can offer a free rework wash at $0 cost without approval; any cash refund request over $15 is escalated to site-manager, never processed autonomously.", "Escalates to site-manager immediately on negative sentiment or a damage-claim mention, or below 70% confidence on any request outside FAQ/booking/status."],
+      "memory": "Per-customer conversation history retained 90 days so a repeat question isn't answered from scratch.",
+      "escalatesTo": "site-manager"
+    },
+    {
+      "id": "membership-billing-agent",
+      "name": "Membership Billing Agent",
+      "tier": "specialist",
+      "purpose": "Runs the monthly membership billing cycle, retries failed charges, and manages the past-due/suspension/pause lifecycle on MembershipSubscription.",
+      "tools": ["MembershipSubscription.read", "MembershipSubscription.update", "Payment.read", "whatsapp.send", "email.send", "automation.trigger"],
+      "triggers": ["Subscription.nextBillingDate reached", "Payment processor webhook (charge succeeded/failed)"],
+      "entitiesTouched": ["MembershipSubscription", "Payment", "Invoice"],
+      "guardrails": ["Never cancels a membership before 3 failed retry attempts spread over 7 days.", "Never charges a stored payment method without documented consent on file at signup.", "Suspension (not cancellation) is the automatic outcome of unresolved past-due status - cancellation after 30 days suspended is a scheduled transition, not an agent decision each time."],
+      "escalatesTo": "site-manager"
+    },
+    {
+      "id": "inventory-forecaster",
+      "name": "Inventory Forecaster",
+      "tier": "specialist",
+      "purpose": "Predicts chemical/consumable usage (soap, wax, tire shine, microfiber towels, reclaim filter media) from rolling wash volume and package mix, flags reorder points, and drafts purchase orders.",
+      "tools": ["Supply.read", "Stock.read", "WashOrder.read", "PurchaseOrder.create", "automation.trigger"],
+      "triggers": ["Nightly schedule", "Stock.quantity crossing Supply.reorderThreshold"],
+      "entitiesTouched": ["Supply", "Stock", "PurchaseOrder"],
+      "guardrails": ["Auto-approves and sends POs under $150; anything above requires site-manager sign-off before the PO leaves Draft."],
+      "escalatesTo": "site-manager"
+    },
+    {
+      "id": "predictive-maintenance-agent",
+      "name": "Predictive Maintenance Agent",
+      "tier": "specialist",
+      "purpose": "Watches IoT telemetry (vibration, motor current draw, temperature, water flow/turbidity, blower RPM, compressor pressure) on the tunnel conveyor motor, water reclaim system, boiler, air compressor, and dryer blowers, distinguishes slow bearing/filter drift from a sudden fault spike, and auto-opens a MaintenanceOrder before hard failure.",
+      "tools": ["iot.read_telemetry", "Asset.read", "Asset.update", "MaintenanceOrder.create", "Stock.read", "PurchaseOrder.create", "notify_role"],
+      "triggers": ["Continuous telemetry stream (evaluated every 60 seconds against each asset's learned normal range)"],
+      "entitiesTouched": ["Asset", "MaintenanceOrder", "Stock", "PurchaseOrder"],
+      "guardrails": ["Can create/schedule a MaintenanceOrder and request parts autonomously.", "Taking equipment offline during business hours requires site-manager confirmation unless the asset has already failed or is unsafe to keep running (e.g. boiler over-temperature), in which case it takes the asset offline immediately and notifies site-manager."],
+      "escalatesTo": "site-manager"
+    },
+    {
+      "id": "quality-anomaly-detector",
+      "name": "Quality Anomaly Detector",
+      "tier": "task",
+      "purpose": "Flags a wash cycle whose duration is statistically too fast (a likely skipped step) or too slow (a likely jam) compared to that package's normal cycle time, routing it to a human QC glance before checkout.",
+      "tools": ["WashOrder.read", "iot.read_telemetry", "notify_role"],
+      "triggers": ["WashOrder transitions InWash -> QualityCheck"],
+      "entitiesTouched": ["WashOrder"],
+      "guardrails": ["Never blocks checkout on its own - flags for a human wash-technician glance only; qcResult is always set by a person, not by this agent."],
+      "escalatesTo": "site-manager"
+    },
+    {
+      "id": "review-response-agent",
+      "name": "Review Response Agent",
+      "tier": "specialist",
+      "purpose": "Monitors Google Business Profile and social mentions, auto-thanks simple positive reviews with a loyalty-point offer, and opens a Ticket + immediate site-manager alert for anything negative or mentioning damage.",
+      "tools": ["web_search", "Ticket.create", "notify_role", "Customer.update"],
+      "triggers": ["New review or mention detected"],
+      "entitiesTouched": ["Ticket", "Customer"],
+      "guardrails": ["Never auto-responds to a review below 4 stars or one mentioning damage/injury/billing - always escalated to site-manager, never auto-replied."],
+      "escalatesTo": "site-manager"
+    },
+    {
+      "id": "fleet-lead-scorer",
+      "name": "Fleet Lead Scorer",
+      "tier": "task",
+      "purpose": "Scores an inbound commercial/fleet inquiry (vehicle count requested, business-hours contact pattern, invoicing-terms request) and creates a follow-up notification for the fleet-account-manager rather than a full sales pipeline - most fleet interest is a handful of local businesses, not a sales org.",
+      "tools": ["Customer.read", "Customer.update", "notify_role"],
+      "triggers": ["Customer.isFleetAccount flagged true, or a WhatsApp/phone inquiry mentions multiple vehicles"],
+      "entitiesTouched": ["Customer"],
+      "guardrails": ["Never commits to custom fleet pricing - always a human-quoted follow-up."],
+      "escalatesTo": "fleet-account-manager"
+    },
+    {
+      "id": "phone-line-agent",
+      "name": "Phone Line Agent",
+      "tier": "specialist",
+      "purpose": "Answers and triages inbound calls (hours, membership pricing, fleet inquiries), transcribes and summarizes the call onto the relevant Customer/Ticket record, and can place outbound calls for a high-value fleet callback or an overdue-payment call escalated from membership-billing-agent.",
+      "tools": ["voice.call", "voice.transcribe", "Ticket.create", "Customer.read", "notify_role"],
+      "triggers": ["Inbound phone call", "Outbound-call handoff from membership-billing-agent or fleet-lead-scorer"],
+      "entitiesTouched": ["Customer", "Ticket"],
+      "guardrails": ["Never collects or reads back full payment card details over the phone - directs the caller to the kiosk, WhatsApp payment link, or a human for anything requiring card entry.", "Escalates anything beyond hours/pricing/FAQ to a human role immediately, same threshold as wash-concierge."],
+      "escalatesTo": "site-manager"
+    }
+  ],
+  "automations": [
+    {
+      "id": "notify-ready-for-pickup",
+      "trigger": { "event": "WashOrder: QualityCheck -> ReadyForPickup", "entity": "WashOrder" },
+      "condition": "customer.whatsappOptIn == true",
+      "action": { "type": "send-whatsapp", "params": { "template": "wash-ready" } },
+      "owner": "wash-concierge"
+    },
+    {
+      "id": "queue-wait-alert",
+      "trigger": { "event": "queue-length-recalculated", "entity": "WashOrder" },
+      "condition": "queueLength > 8 || predictedWaitMinutes > 20",
+      "action": { "type": "notify-role", "params": { "role": "site-manager", "message": "Queue backing up - consider opening self-serve overflow or an extra bay-attendant." } },
+      "owner": "queue-dispatch-agent"
+    },
+    {
+      "id": "bay-down-reroute",
+      "trigger": { "event": "Asset.status changed to down", "entity": "Asset" },
+      "condition": null,
+      "action": { "type": "invoke-agent", "params": { "agent": "queue-dispatch-agent", "action": "rebalance-queue-excluding-bay" } },
+      "owner": "site-manager"
+    },
+    {
+      "id": "membership-payment-failed-dunning",
+      "trigger": { "event": "MembershipSubscription: Active -> PastDue", "entity": "MembershipSubscription" },
+      "condition": null,
+      "action": { "type": "send-whatsapp", "params": { "template": "payment-failed-update-card", "escalation": ["whatsapp", "email", "phone-line-agent-callback"] } },
+      "owner": "membership-billing-agent"
+    },
+    {
+      "id": "membership-renewal-price-lock-reminder",
+      "trigger": { "event": "MembershipSubscription.nextBillingDate", "entity": "MembershipSubscription" },
+      "condition": "daysUntilBilling == 3",
+      "action": { "type": "send-whatsapp", "params": { "template": "membership-renewing-soon" } },
+      "owner": "membership-billing-agent"
+    },
+    {
+      "id": "low-supply-reorder",
+      "trigger": { "event": "Stock.quantity crosses below reorderThreshold", "entity": "Stock" },
+      "condition": null,
+      "action": { "type": "invoke-agent", "params": { "agent": "inventory-forecaster" } },
+      "owner": "inventory-forecaster"
+    },
+    {
+      "id": "maintenance-overdue-escalation",
+      "trigger": { "event": "MaintenanceOrder.status unchanged past scheduled date", "entity": "MaintenanceOrder" },
+      "condition": "status in ['Requested','PartsPending','Scheduled'] && scheduledDate < today",
+      "action": { "type": "notify-role", "params": { "role": "site-manager" } },
+      "owner": "site-manager"
+    },
+    {
+      "id": "shift-no-show-alert",
+      "trigger": { "event": "Shift.startTime passed with status still scheduled", "entity": "Shift" },
+      "condition": "status == 'scheduled' && now > startTime + 10min",
+      "action": { "type": "notify-role", "params": { "role": "site-manager" } },
+      "owner": "site-manager"
+    },
+    {
+      "id": "fleet-invoice-overdue",
+      "trigger": { "event": "Invoice: Sent -> Overdue", "entity": "Invoice" },
+      "condition": "customer.isFleetAccount == true",
+      "action": { "type": "notify-role", "params": { "role": "fleet-account-manager" } },
+      "owner": "fleet-account-manager"
+    },
+    {
+      "id": "post-wash-review-request",
+      "trigger": { "event": "WashOrder: ReadyForPickup -> Completed", "entity": "WashOrder" },
+      "condition": "customer.whatsappOptIn == true && paymentMethod != 'membership' && no other message sent to this customer today",
+      "action": { "type": "send-whatsapp", "params": { "template": "review-request", "delay": "+2h" } },
+      "owner": "wash-concierge"
+    },
+    {
+      "id": "winback-lapsed-customer",
+      "trigger": { "event": "45 days since last Completed WashOrder", "entity": "Customer" },
+      "condition": "customer.marketingConsent == true && isFleetAccount == false",
+      "action": { "type": "invoke-agent", "params": { "agent": "wash-concierge", "action": "send-winback-offer" } },
+      "owner": "wash-concierge"
+    },
+    {
+      "id": "damage-claim-immediate-escalation",
+      "trigger": { "event": "Ticket created with category = damage-claim", "entity": "Ticket" },
+      "condition": null,
+      "action": { "type": "notify-role", "params": { "role": "site-manager", "urgency": "immediate" } },
+      "owner": "site-manager"
+    }
+  ],
+  "reminders": [
+    { "id": "membership-billing-3d-notice", "entity": "MembershipSubscription", "offset": "-3d", "channel": "whatsapp" },
+    { "id": "detail-appointment-reminder", "entity": "WashOrder", "offset": "-2h", "channel": "whatsapp", "escalation": ["whatsapp", "sms"] },
+    { "id": "post-wash-review-request-reminder", "entity": "WashOrder", "offset": "+2h", "channel": "whatsapp" },
+    { "id": "asset-preventive-maintenance-due", "entity": "Asset", "offset": "RRULE:FREQ=MONTHLY", "channel": "call-agent", "escalation": ["call-agent", "notify-role:site-manager"] },
+    { "id": "past-due-payment-followup", "entity": "MembershipSubscription", "offset": "+3d", "channel": "whatsapp", "escalation": ["whatsapp", "email", "call-agent"] },
+    { "id": "fleet-lead-followup", "entity": "Customer", "offset": "+1d", "channel": "call-agent" }
+  ],
+  "whatsapp": {
+    "useCases": [
+      "Booking/order confirmation and wash-ready notification",
+      "Membership sign-up and billing lifecycle messaging",
+      "Order status lookup (\"where's my car\") via the concierge",
+      "Review requests and win-back offers",
+      "Detail-bay appointment reminders"
+    ],
+    "templates": [
+      { "id": "wash-ready", "category": "UTILITY", "variables": ["customerName", "vehiclePlate", "bayNumber"] },
+      { "id": "membership-welcome", "category": "UTILITY", "variables": ["customerName", "planName", "billingDate"] },
+      { "id": "payment-failed-update-card", "category": "UTILITY", "variables": ["customerName", "planName", "updateLink"] },
+      { "id": "membership-renewing-soon", "category": "UTILITY", "variables": ["customerName", "amount", "billingDate"] },
+      { "id": "detail-appointment-reminder", "category": "UTILITY", "variables": ["customerName", "appointmentTime", "packageName"] },
+      { "id": "review-request", "category": "UTILITY", "variables": ["customerName", "washOrderId"] },
+      { "id": "winback-offer", "category": "MARKETING", "variables": ["customerName", "discountCode"] }
+    ],
+    "flows": [
+      "book-detail-appointment -> enroll/booking workflow -> handoff to cashier if the customer wants to pay by an unsupported method",
+      "membership-signup -> enroll-membership workflow -> handoff to cashier only if plate lookup conflicts with an existing subscription",
+      "wash-status-lookup -> read-only WashOrder query, no handoff needed",
+      "faq-hours-pricing-policy -> knowledge_base.search grounded answer",
+      "human-handoff -> triggered by low confidence or negative sentiment, routes to site-manager's inbox"
+    ],
+    "consentEntity": "Customer.whatsappOptIn (transactional messaging implied by using the service; Customer.marketingConsent required separately for MARKETING-category sends)"
+  },
+  "socialMedia": {
+    "platforms": [
+      "Instagram - before/after wash and detail shots, high-visual local business",
+      "TikTok - satisfying tunnel-wash and foam-cannon short-form video",
+      "Google Business Profile - review generation is disproportionately valuable for a location-based business",
+      "Facebook - local community groups, event/seasonal promo reach for an older demographic than Instagram/TikTok"
+    ],
+    "contentPillars": ["before/after transformations", "membership value ('what unlimited actually saves you')", "behind-the-scenes tunnel/equipment content", "seasonal promos (pollen season, post-storm, holiday gift memberships)", "customer/community shoutouts"],
+    "postingCadence": "Instagram 4x/week, TikTok 3x/week, Facebook 2x/week, Google Business Profile posts weekly + review responses daily",
+    "listeningKeywords": ["SplashPoint", "SplashPoint Express Wash", "splash point car wash", "[competitor names in local market]", "car wash near me [local area]"]
+  },
+  "marketing": {
+    "segments": ["New (0 washes)", "Active Pay-Per-Wash (wash in last 30d, no membership)", "Active Member (Subscription.status = Active)", "At-Risk Member (2+ missed expected visits or a recent PastDue)", "At-Risk Pay-Per-Wash (no wash in 45-90d, previously 3+ visits)", "Lapsed (>90d no wash, no active membership)", "Fleet/Commercial"],
+    "funnels": ["Awareness (social/Google Business Profile) -> First Wash (walk-in or promo code) -> Membership Conversion -> Retained Member -> Advocate (referral)"],
+    "campaigns": [
+      { "note": "see 04-growth/marketing.md for the full table - segment/channel/trigger/offer" }
+    ],
+    "loyalty": { "type": "points-per-dollar for pay-per-wash customers, redeemable for a free upgrade tier or a free wash; membership itself is the primary retention mechanic for repeat visitors" },
+    "referral": { "type": "referral code on Customer, referred customer gets 50% off first wash, referrer gets a free wash credited on the referred customer's first completed WashOrder" },
+    "adCampaigns": [
+      { "id": "geo-radius-membership-push", "platform": "Meta Ads", "objective": "conversions", "targetSegment": "New (0 washes)", "budgetModel": "daily budget, geo-fenced 5-mile radius" },
+      { "id": "google-local-services-ads", "platform": "Google Ads (Local Services)", "objective": "leads", "targetSegment": "New (0 washes)", "budgetModel": "pay-per-lead" }
+    ],
+    "abTests": [
+      { "id": "membership-price-anchor-test", "hypothesis": "Showing the premium tier first makes the basic tier feel like the 'value' choice, raising basic sign-up rate", "variants": ["premium-tier-first", "basic-tier-first"], "metric": "membership sign-up conversion rate at kiosk" }
+    ],
+    "attributionModel": "last-touch",
+    "dripSequences": [
+      { "id": "new-customer-welcome", "trigger": "First Completed WashOrder", "steps": ["Day 0: thank-you + loyalty points explainer", "Day 3: membership value comparison (savings after 3 washes/mo)", "Day 10: membership sign-up offer with a limited-time discount"] },
+      { "id": "at-risk-member-winback", "trigger": "MembershipSubscription enters PastDue or 2 missed expected visits in a cycle", "steps": ["Day 0: gentle check-in via WhatsApp", "Day 4: escalate to email with a pause-instead-of-cancel offer", "Day 8: phone-line-agent outbound callback offer if still unresolved"] }
+    ]
+  },
+  "integrations": [
+    { "id": "stripe", "category": "payments", "direction": "bidirectional", "entitiesSynced": ["Payment", "Invoice", "MembershipSubscription"], "authType": "oauth2" },
+    { "id": "quickbooks-online", "category": "accounting", "direction": "outbound", "entitiesSynced": ["JournalEntry", "Invoice"], "authType": "oauth2" },
+    { "id": "google-calendar", "category": "calendar", "direction": "bidirectional", "entitiesSynced": ["Shift", "WashOrder"], "authType": "oauth2" },
+    { "id": "google-business-profile", "category": "communications", "direction": "bidirectional", "entitiesSynced": ["Ticket"], "authType": "oauth2" },
+    { "id": "whatsapp-cloud-api", "category": "communications", "direction": "bidirectional", "entitiesSynced": ["Customer", "WashOrder", "MembershipSubscription"], "authType": "api-key" },
+    { "id": "google-analytics-meta-pixel", "category": "analytics", "direction": "inbound", "entitiesSynced": [], "authType": "api-key" },
+    { "id": "wash-sensor-platform", "category": "iot-telemetry", "direction": "inbound", "entitiesSynced": ["Asset"], "authType": "api-key" },
+    { "id": "weather-api", "category": "analytics", "direction": "inbound", "entitiesSynced": [], "authType": "api-key" },
+    { "id": "generic-custom-webhook", "category": "custom-webhook", "direction": "bidirectional", "entitiesSynced": [], "authType": "webhook-secret" }
+  ],
+  "security": {
+    "roles": ["owner", "site-manager", "bay-attendant", "wash-technician", "detail-technician", "cashier", "fleet-account-manager", "ops-orchestrator", "strategy-advisor", "system-health-agent", "queue-dispatch-agent", "wash-concierge", "membership-billing-agent", "inventory-forecaster", "predictive-maintenance-agent", "quality-anomaly-detector", "review-response-agent", "fleet-lead-scorer", "phone-line-agent"],
+    "permissions": [
+      { "role": "owner", "entity": "WashOrder", "actions": ["create", "read", "update", "delete", "approve"] },
+      { "role": "owner", "entity": "Customer", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "Vehicle", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "MembershipSubscription", "actions": ["create", "read", "update", "delete", "approve"] },
+      { "role": "owner", "entity": "MembershipPlan", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "Employee", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "Shift", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "Asset", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "MaintenanceOrder", "actions": ["create", "read", "update", "delete", "approve"] },
+      { "role": "owner", "entity": "Supply", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "Stock", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "PurchaseOrder", "actions": ["create", "read", "update", "delete", "approve"] },
+      { "role": "owner", "entity": "StockAdjustment", "actions": ["create", "read", "update", "approve"] },
+      { "role": "owner", "entity": "Invoice", "actions": ["create", "read", "update", "delete", "approve"] },
+      { "role": "owner", "entity": "Payment", "actions": ["create", "read", "update", "approve"] },
+      { "role": "owner", "entity": "JournalEntry", "actions": ["read", "approve"] },
+      { "role": "owner", "entity": "Ticket", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "SocialPost", "actions": ["create", "read", "update", "delete", "approve"] },
+      { "role": "owner", "entity": "ServiceBay", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "WashPackage", "actions": ["create", "read", "update", "delete"] },
+      { "role": "owner", "entity": "Supplier", "actions": ["create", "read", "update", "delete"] },
+
+      { "role": "site-manager", "entity": "WashOrder", "actions": ["create", "read", "update", "approve"] },
+      { "role": "site-manager", "entity": "Customer", "actions": ["read", "update"] },
+      { "role": "site-manager", "entity": "Vehicle", "actions": ["read", "update"] },
+      { "role": "site-manager", "entity": "MembershipSubscription", "actions": ["read", "update", "approve"] },
+      { "role": "site-manager", "entity": "MembershipPlan", "actions": ["read"] },
+      { "role": "site-manager", "entity": "Employee", "actions": ["create", "read", "update"] },
+      { "role": "site-manager", "entity": "Shift", "actions": ["create", "read", "update"] },
+      { "role": "site-manager", "entity": "Asset", "actions": ["read", "update", "approve"] },
+      { "role": "site-manager", "entity": "MaintenanceOrder", "actions": ["create", "read", "update", "approve"] },
+      { "role": "site-manager", "entity": "Supply", "actions": ["read", "update"] },
+      { "role": "site-manager", "entity": "Stock", "actions": ["read", "update"] },
+      { "role": "site-manager", "entity": "PurchaseOrder", "actions": ["create", "read", "update", "approve"] },
+      { "role": "site-manager", "entity": "StockAdjustment", "actions": ["create", "read", "approve"] },
+      { "role": "site-manager", "entity": "Invoice", "actions": ["read", "update", "approve"] },
+      { "role": "site-manager", "entity": "Payment", "actions": ["read", "approve"] },
+      { "role": "site-manager", "entity": "Ticket", "actions": ["create", "read", "update"] },
+      { "role": "site-manager", "entity": "SocialPost", "actions": ["read", "approve"] },
+      { "role": "site-manager", "entity": "ServiceBay", "actions": ["read", "update"] },
+
+      { "role": "bay-attendant", "entity": "WashOrder", "actions": ["create", "read", "update"] },
+      { "role": "bay-attendant", "entity": "Customer", "actions": ["create", "read"] },
+      { "role": "bay-attendant", "entity": "Vehicle", "actions": ["create", "read"] },
+      { "role": "bay-attendant", "entity": "ServiceBay", "actions": ["read", "update"] },
+      { "role": "bay-attendant", "entity": "Stock", "actions": ["read", "update"] },
+
+      { "role": "wash-technician", "entity": "WashOrder", "actions": ["read", "update"] },
+      { "role": "wash-technician", "entity": "ServiceBay", "actions": ["read", "update"] },
+      { "role": "wash-technician", "entity": "Asset", "actions": ["read"] },
+      { "role": "wash-technician", "entity": "MaintenanceOrder", "actions": ["read", "update"] },
+
+      { "role": "detail-technician", "entity": "WashOrder", "actions": ["read", "update"] },
+      { "role": "detail-technician", "entity": "ServiceBay", "actions": ["read", "update"] },
+
+      { "role": "cashier", "entity": "WashOrder", "actions": ["read", "update"] },
+      { "role": "cashier", "entity": "Customer", "actions": ["create", "read", "update"] },
+      { "role": "cashier", "entity": "Vehicle", "actions": ["create", "read", "update"] },
+      { "role": "cashier", "entity": "MembershipSubscription", "actions": ["create", "read", "update"] },
+      { "role": "cashier", "entity": "MembershipPlan", "actions": ["read"] },
+      { "role": "cashier", "entity": "Invoice", "actions": ["create", "read"] },
+      { "role": "cashier", "entity": "Payment", "actions": ["create", "read"] },
+
+      { "role": "fleet-account-manager", "entity": "Customer", "actions": ["read", "update"] },
+      { "role": "fleet-account-manager", "entity": "Invoice", "actions": ["read", "update"] },
+      { "role": "fleet-account-manager", "entity": "WashOrder", "actions": ["read"] },
+
+      { "role": "ops-orchestrator", "entity": "WashOrder", "actions": ["read"] },
+      { "role": "ops-orchestrator", "entity": "ServiceBay", "actions": ["read"] },
+      { "role": "ops-orchestrator", "entity": "Shift", "actions": ["read"] },
+
+      { "role": "strategy-advisor", "entity": "WashOrder", "actions": ["read"] },
+      { "role": "strategy-advisor", "entity": "MembershipSubscription", "actions": ["read"] },
+      { "role": "strategy-advisor", "entity": "Asset", "actions": ["read"] },
+      { "role": "strategy-advisor", "entity": "Employee", "actions": ["read"] },
+
+      { "role": "queue-dispatch-agent", "entity": "WashOrder", "actions": ["read", "update"] },
+      { "role": "queue-dispatch-agent", "entity": "ServiceBay", "actions": ["read", "update"] },
+
+      { "role": "wash-concierge", "entity": "WashOrder", "actions": ["read"] },
+      { "role": "wash-concierge", "entity": "Customer", "actions": ["read", "update"] },
+      { "role": "wash-concierge", "entity": "MembershipSubscription", "actions": ["read", "create"] },
+      { "role": "wash-concierge", "entity": "Ticket", "actions": ["create"] },
+
+      { "role": "membership-billing-agent", "entity": "MembershipSubscription", "actions": ["read", "update"] },
+      { "role": "membership-billing-agent", "entity": "Payment", "actions": ["read"] },
+      { "role": "membership-billing-agent", "entity": "Invoice", "actions": ["read"] },
+
+      { "role": "inventory-forecaster", "entity": "Supply", "actions": ["read"] },
+      { "role": "inventory-forecaster", "entity": "Stock", "actions": ["read"] },
+      { "role": "inventory-forecaster", "entity": "PurchaseOrder", "actions": ["create", "read"] },
+
+      { "role": "predictive-maintenance-agent", "entity": "Asset", "actions": ["read", "update"] },
+      { "role": "predictive-maintenance-agent", "entity": "MaintenanceOrder", "actions": ["create", "read"] },
+      { "role": "predictive-maintenance-agent", "entity": "Stock", "actions": ["read"] },
+      { "role": "predictive-maintenance-agent", "entity": "PurchaseOrder", "actions": ["create"] },
+
+      { "role": "quality-anomaly-detector", "entity": "WashOrder", "actions": ["read"] },
+
+      { "role": "review-response-agent", "entity": "Ticket", "actions": ["create"] },
+      { "role": "review-response-agent", "entity": "Customer", "actions": ["read", "update"] },
+
+      { "role": "fleet-lead-scorer", "entity": "Customer", "actions": ["read", "update"] },
+
+      { "role": "phone-line-agent", "entity": "Customer", "actions": ["read"] },
+      { "role": "phone-line-agent", "entity": "Ticket", "actions": ["create"] },
+
+      { "role": "system-health-agent", "entity": "WashOrder", "actions": [] }
+    ],
+    "abacPolicies": [
+      "A site-manager can only approve a refund or PO within their own site's scope - moot at single-location scale but stated for when the business expands.",
+      "A support agent (human or wash-concierge) can view Customer.paymentMethodToken only in masked/last-4 form, and only while handling an active WashOrder or Ticket for that customer, never for general browsing.",
+      "Marketing campaigns (marketing.campaigns, marketing.dripSequences, WhatsApp MARKETING-category templates) can only target customers where Customer.marketingConsent == true.",
+      "Only site-manager or owner can approve a MaintenanceOrder that takes a bay offline during posted operating hours, unless the triggering Asset is already status = down or unsafe."
+    ],
+    "complianceNotes": [
+      "PCI-DSS scope minimization: payment card data is never stored directly - Customer.paymentMethodToken and Payment.processorTxnId are tokens from the Stripe integration, not raw card numbers.",
+      "Water discharge/reclaim system operation may be subject to local wastewater/environmental permitting - track the water-reclaim-ro-system Asset's compliance-relevant readings (turbidity, discharge volume) as part of its maintenance log for inspection readiness.",
+      "Employee compensation and tax-ID fields (Employee.hourlyRate, any government ID collected at hire) are piiOrSensitive and restricted to site-manager/owner - a co-worker never sees another employee's pay rate.",
+      "No health, food-safety, or childcare-specific compliance regime applies to this business category."
+    ]
+  },
+  "simulation": {
+    "models": [
+      "demand-forecast: predicts daily/hourly wash volume from historical WashOrder counts, day-of-week seasonality, and a weather-api rain/pollen overlay",
+      "bay-throughput-queue-simulator: given bay count, avg cycle time per package tier, and technician staffing, computes expected vehicles/hour capacity and queue wait",
+      "staffing-capacity-simulator: staff-hours needed vs. scheduled Shift hours, tied to the demand forecast and package mix",
+      "cash-flow-forecast: membership MRR (recurring) plus forecasted pay-per-wash revenue against payroll, chemical costs, utilities, and equipment financing",
+      "membership-economics-simulator: wash-through rate, plan LTV, CAC, and the breakeven visit count where an unlimited member becomes unprofitable",
+      "pricing-scenario-simulator: revenue/margin impact of a membership price change or a new package tier",
+      "downtime-cost-simulator: lost throughput x average ticket value for an Asset going down, by bay type and time of day"
+    ],
+    "scenarios": [
+      "add-a-5th-tunnel-bay",
+      "raise-basic-membership-price-10-percent",
+      "three-rainy-days-this-week",
+      "tunnel-conveyor-down-2-days",
+      "shift-mix-toward-full-service-upsell-campaign"
+    ]
+  },
+  "analytics": {
+    "dimensions": ["Time", "Bay", "VehicleType", "PackageTier", "Channel", "Technician", "PaymentMethod"],
+    "measures": ["Revenue", "WashCount", "AverageOrderValue", "GrossMargin", "BayUtilization", "MembershipMRR", "WashThroughRate", "MembershipChurnRate", "ChemicalCostPerWash", "EquipmentUptimeRate"],
+    "reports": [
+      { "id": "revenue-by-bay-daily", "name": "Revenue by Bay, Daily", "measures": ["Revenue", "WashCount"], "dimensions": ["Bay", "Time"], "cadence": "daily" },
+      { "id": "membership-mix-weekly", "name": "Membership vs Pay-Per-Wash Mix, Weekly", "measures": ["Revenue", "WashCount"], "dimensions": ["PaymentMethod", "Time"], "cadence": "weekly" },
+      { "id": "package-tier-margin", "name": "Margin by Package Tier", "measures": ["GrossMargin", "ChemicalCostPerWash"], "dimensions": ["PackageTier"], "cadence": "weekly" },
+      { "id": "aov-by-vehicle-type", "name": "Average Order Value by Vehicle Type", "measures": ["AverageOrderValue"], "dimensions": ["VehicleType"], "cadence": "monthly" },
+      { "id": "technician-throughput", "name": "Throughput by Technician", "measures": ["WashCount", "BayUtilization"], "dimensions": ["Technician", "Time"], "cadence": "weekly" },
+      { "id": "equipment-uptime-by-asset", "name": "Equipment Uptime by Asset", "measures": ["EquipmentUptimeRate"], "dimensions": ["Time"], "cadence": "weekly" }
+    ],
+    "financialStatements": ["profit-and-loss", "cash-flow", "ar-aging"],
+    "cohorts": ["by membership signup month", "by first-wash acquisition channel"],
+    "healthScore": {
+      "components": [
+        { "kpi": "membership-penetration-rate", "weight": 0.3 },
+        { "kpi": "bay-utilization-rate", "weight": 0.25 },
+        { "kpi": "net-membership-growth", "weight": 0.2 },
+        { "kpi": "avg-review-rating", "weight": 0.15 },
+        { "kpi": "equipment-uptime-rate", "weight": 0.1 }
+      ]
+    },
+    "anomalyRules": [
+      "avg-wait-time-minutes moves more than 2 standard deviations above its trailing 4-week baseline for the same hour-of-day/day-of-week",
+      "membership cancellation count in a week exceeds 2x the trailing 8-week average",
+      "chemical-cost-per-wash rises more than 15% week-over-week with no corresponding package-mix shift",
+      "an Asset's telemetry-flagged anomaly count doubles week-over-week (possible sensor fault or genuine accelerating wear)"
+    ],
+    "scheduledDigests": [
+      { "id": "owner-daily-digest", "audience": "owner", "cadence": "daily", "channel": "whatsapp" },
+      { "id": "site-manager-morning-brief", "audience": "site-manager", "cadence": "daily", "channel": "in-app" },
+      { "id": "owner-weekly-health-report", "audience": "owner", "cadence": "weekly", "channel": "email" }
+    ],
+    "externalSources": [
+      { "integrationId": "wash-sensor-platform", "contributes": ["telemetry trend history and raw signal detail beyond the live read"], "joinsToDimensions": ["Time", "Bay"], "freshness": "streamed near-real-time, ingestion-store batch every 5 minutes" },
+      { "integrationId": "weather-api", "contributes": ["daily precipitation, pollen index"], "joinsToDimensions": ["Time"], "freshness": "synced hourly" },
+      { "integrationId": "google-analytics-meta-pixel", "contributes": ["website/landing-page traffic and ad click-throughs to the membership signup page"], "joinsToDimensions": ["Time", "Channel"], "freshness": "synced nightly, up to 24h behind native data" },
+      { "integrationId": "stripe", "contributes": ["processing fees and payout timing"], "joinsToDimensions": ["Time", "PaymentMethod"], "freshness": "synced nightly" }
+    ],
+    "crossSourceAnalyses": [
+      { "id": "true-net-membership-margin", "sourcesUsed": ["stripe", "wash-sensor-platform"], "answers": "true net margin per membership tier after processing fees and the amortized chemical/water/labor cost per visit at the plan's actual wash-through rate - not just sticker MRR" },
+      { "id": "weather-adjusted-demand-accuracy", "sourcesUsed": ["weather-api"], "answers": "how much of a slow day is explained by weather vs. an actual demand/marketing problem, so a rainy Tuesday doesn't get misread as a marketing failure" },
+      { "id": "downtime-cost-with-telemetry-lead-time", "sourcesUsed": ["wash-sensor-platform"], "answers": "for each predictive-maintenance catch, how much downtime (and revenue) was avoided vs. if the same fault had run to hard failure, justifying the sensor investment in dollars" },
+      { "id": "true-blended-cac", "sourcesUsed": ["google-analytics-meta-pixel", "stripe"], "answers": "true cost to acquire a paying member across ad spend and processing fees per signup, vs. the ad platform's own self-reported conversion count" }
+    ]
+  },
+  "views": [
+    { "id": "executive-view", "name": "Executive/Owner View", "audience": "owner", "cadence": "daily", "medium": "whatsapp-digest", "includes": ["healthScore", "cars-washed-per-day", "membership-penetration-rate", "net-membership-growth", "revenue-by-bay-daily", "open anomaly alerts"] },
+    { "id": "operations-view", "name": "Operations View", "audience": "site-manager", "cadence": "real-time", "medium": "in-app", "includes": ["today's WashOrder queue by status", "bay-status board", "shift-no-show-alert list", "open MaintenanceOrders", "open Tickets"] },
+    { "id": "financial-view", "name": "Financial View", "audience": "owner", "cadence": "monthly", "medium": "emailed-report", "includes": ["profit-and-loss", "cash-flow", "ar-aging", "package-tier-margin", "budget-vs-actual"] },
+    { "id": "customer-crm-view", "name": "Customer/CRM View", "audience": "site-manager", "cadence": "weekly", "medium": "in-app", "includes": ["segment sizes and movement", "at-risk-member list", "campaign performance", "customer360Includes"] },
+    { "id": "team-view", "name": "Team/HR View", "audience": "site-manager", "cadence": "weekly", "medium": "in-app", "includes": ["Shift schedule and coverage gaps", "technician-throughput", "payroll status"] },
+    { "id": "growth-marketing-view", "name": "Growth/Marketing View", "audience": "owner", "cadence": "weekly", "medium": "in-app", "includes": ["funnel stage volumes", "adCampaigns ROI", "social-media analytics", "true-blended-cac"] },
+    { "id": "technical-architecture-view", "name": "Technical/Architecture View", "audience": "engineering team", "cadence": "on-demand", "medium": "diagram", "includes": ["entity-relationship diagram", "agent org chart", "integration map"] },
+    { "id": "field-view", "name": "Field/Mobile View (Bay Floor)", "audience": "bay-attendant", "cadence": "real-time", "medium": "in-app", "includes": ["queue board", "assigned-technician-today list", "one-tap qc-passed/qc-failed action"] }
+  ],
+  "knowledgeBase": {
+    "documentTypes": [
+      { "id": "wash-receipt", "category": "customer-facing", "generatedFrom": ["WashOrder", "Invoice", "Payment"] },
+      { "id": "membership-agreement", "category": "customer-facing", "generatedFrom": ["MembershipSubscription", "MembershipPlan"] },
+      { "id": "rework-guarantee-policy", "category": "customer-facing", "generatedFrom": [] },
+      { "id": "opening-closing-checklist", "category": "internal", "generatedFrom": [] },
+      { "id": "bay-safety-procedure", "category": "internal", "generatedFrom": ["Asset"] },
+      { "id": "chemical-handling-sds-log", "category": "internal", "generatedFrom": ["Supply"] },
+      { "id": "faq-hours-pricing-membership", "category": "knowledge-article", "generatedFrom": [] },
+      { "id": "damage-claim-policy", "category": "knowledge-article", "generatedFrom": [] },
+      { "id": "wash-package-comparison", "category": "knowledge-article", "generatedFrom": ["WashPackage", "PackagePricing"] }
+    ],
+    "sources": ["google-business-profile", "generic-custom-webhook (internal wiki storage)"],
+    "groundsAgents": ["wash-concierge", "review-response-agent", "phone-line-agent"]
+  },
+  "accounting": {
+    "chartOfAccounts": [
+      { "code": "1000", "name": "Cash", "type": "asset" },
+      { "code": "1100", "name": "Accounts Receivable - Fleet", "type": "asset" },
+      { "code": "1400", "name": "Chemical & Supply Inventory", "type": "asset" },
+      { "code": "1500", "name": "Wash Equipment (net of depreciation)", "type": "asset" },
+      { "code": "2000", "name": "Supplier Payables", "type": "liability" },
+      { "code": "2100", "name": "Sales Tax Payable", "type": "liability" },
+      { "code": "2200", "name": "Loyalty Points Payable", "type": "liability" },
+      { "code": "2300", "name": "Deferred Membership Revenue", "type": "liability" },
+      { "code": "2400", "name": "Equipment Financing Payable", "type": "liability" },
+      { "code": "3000", "name": "Owner's Equity", "type": "equity" },
+      { "code": "4000", "name": "Pay-Per-Wash Revenue", "type": "revenue" },
+      { "code": "4100", "name": "Membership Revenue", "type": "revenue" },
+      { "code": "4200", "name": "Fleet/Commercial Revenue", "type": "revenue" },
+      { "code": "5000", "name": "Payroll Expense", "type": "expense" },
+      { "code": "5100", "name": "Chemical & Supply Expense", "type": "expense" },
+      { "code": "5200", "name": "Water & Utilities Expense", "type": "expense" },
+      { "code": "5300", "name": "Equipment Maintenance Expense", "type": "expense" },
+      { "code": "5400", "name": "Payment Processing Fees", "type": "expense" },
+      { "code": "5500", "name": "Marketing Expense", "type": "expense" },
+      { "code": "5600", "name": "Loyalty Program Expense", "type": "expense" },
+      { "code": "5700", "name": "Inventory Shrinkage Expense", "type": "expense" },
+      { "code": "5800", "name": "Rent Expense", "type": "expense" }
+    ],
+    "ledgerEntity": "JournalEntry",
+    "baseCurrency": "USD",
+    "additionalCurrencies": [],
+    "taxRules": [
+      { "id": "sales-tax-local", "jurisdiction": "state (single-location, one jurisdiction)", "rate": "per local car-wash service tax rate", "appliesTo": "WashOrder line items where taxable per local rule" }
+    ],
+    "bankAccounts": [
+      { "id": "operating-account", "integrationId": "stripe" }
+    ],
+    "budgets": [
+      { "id": "chemical-supply-budget", "period": "monthly", "scope": "business-wide" },
+      { "id": "marketing-budget", "period": "monthly", "scope": "business-wide" },
+      { "id": "payroll-budget", "period": "monthly", "scope": "business-wide" }
+    ],
+    "closeChecklist": [
+      "Reconcile Stripe payout bank feed against Payment records",
+      "Post accrued supplier invoices for chemicals received but not yet billed",
+      "Post the month's depreciation on Asset equipment",
+      "Review fleet AR aging and flag anything past 45 days for fleet-account-manager follow-up",
+      "Reconcile Loyalty Points Payable against points issued/redeemed this period",
+      "Lock the period from further edits"
+    ],
+    "payrollLinked": true
+  },
+  "crm": {
+    "pipelineStages": [],
+    "dealEntity": null,
+    "quotaModel": null,
+    "leadScoring": ["Customer.fleetLeadScore incorporates: vehicle count requested (3+ vehicles = high), inquiry mentions recurring/scheduled washing, requests net-15 invoicing terms"],
+    "supportChannels": ["whatsapp", "phone", "google-business-profile-comments", "in-app/kiosk"],
+    "ticketEntity": "Ticket",
+    "slaPolicies": [
+      { "ticketType": "damage-claim", "firstResponse": "1h during operating hours", "resolution": "48h" },
+      { "ticketType": "billing-dispute", "firstResponse": "4h", "resolution": "72h" },
+      { "ticketType": "quality-complaint", "firstResponse": "2h during operating hours", "resolution": "24h" },
+      { "ticketType": "membership-question", "firstResponse": "1h (usually resolved by wash-concierge without a human)", "resolution": "24h" }
+    ],
+    "customer360Includes": ["Vehicle list", "WashOrder history", "MembershipSubscription status and wash-through rate", "open and past Ticket list", "loyaltyPoints and referral activity", "marketing segment and campaign engagement"]
+  },
+  "inventory": {
+    "warehouses": ["Main Chemical Room", "Detail Bay Storage"],
+    "trackingMethod": "sku-quantity",
+    "reorderPolicy": "Reorder to a 30-day par level whenever on-hand drops below a 7-day average-consumption supply, computed from trailing wash volume by package mix.",
+    "purchaseOrderEntity": "PurchaseOrder",
+    "suppliers": [
+      { "id": "chem-supplier-primary", "name": "Regional Car Wash Chemical Supply Co.", "leadTimeDays": 4 },
+      { "id": "parts-supplier-equipment", "name": "Tunnel Equipment Parts Distributor", "leadTimeDays": 10 },
+      { "id": "towels-supplier", "name": "Microfiber & Detailing Supplies Wholesaler", "leadTimeDays": 5 }
+    ],
+    "stockTransfers": false
+  },
+  "hr": {
+    "employeeLifecycleStages": ["Applicant", "Hired", "Onboarding", "Active", "On Leave", "Offboarded"],
+    "payrollCadence": "biweekly",
+    "compensationModel": ["hourly wage for bay-attendant/wash-technician/cashier", "hourly wage plus a per-detail-job commission for detail-technician (10% of PackagePricing.price on completed detail-bay WashOrders)", "salary for site-manager", "hourly plus a small per-signed-fleet-account bonus for fleet-account-manager"],
+    "leavePolicies": ["10 PTO days/year, accrued monthly, for full-time staff (30+ scheduled hours/week average)"],
+    "performanceReviewCadence": "quarterly informal check-in, formal annual review - single-location scale doesn't warrant more formal cadence than that",
+    "schedulingEntity": "Shift"
+  },
+  "platformApi": {
+    "style": "rest",
+    "exposedEntities": [
+      { "entity": "WashOrder", "operations": ["read", "create"] },
+      { "entity": "Customer", "operations": ["read", "create"] },
+      { "entity": "MembershipSubscription", "operations": ["read"] },
+      { "entity": "Stock", "operations": ["read"] }
+    ],
+    "authMethods": ["api-key", "hmac-signed"],
+    "scopes": [
+      { "id": "orders-readwrite", "mapsToRole": "cashier" },
+      { "id": "fleet-account-readonly", "mapsToRole": "fleet-account-manager" }
+    ],
+    "webhookEvents": [
+      { "id": "wash-order-ready", "sourceEntity": "WashOrder", "sourceTransition": "QualityCheck -> ReadyForPickup", "payloadFields": ["washOrderId", "vehicleId", "readyAt"] },
+      { "id": "wash-order-completed", "sourceEntity": "WashOrder", "sourceTransition": "ReadyForPickup -> Completed", "payloadFields": ["washOrderId", "completedAt", "amount"] },
+      { "id": "membership-cancelled", "sourceEntity": "MembershipSubscription", "sourceTransition": "Suspended -> Cancelled", "payloadFields": ["subscriptionId", "customerId", "cancelledAt"] },
+      { "id": "stock-low", "sourceEntity": "Stock", "sourceTransition": "quantity crosses below reorderThreshold", "payloadFields": ["itemId", "warehouseId", "quantity"] }
+    ],
+    "rateLimits": "300 requests/min per API key, HTTP 429 with Retry-After on breach",
+    "versioningStrategy": "URL-prefixed /v1/, breaking changes ship as /v2/ with /v1/ kept live for at least 6 months"
+  },
+  "assets": {
+    "assetEntity": "Asset",
+    "assetTypes": ["tunnel-conveyor-motor", "foam-applicator-arch", "water-reclaim-ro-system", "air-compressor", "water-heater-boiler", "dryer-blower-bank", "vacuum-station"],
+    "maintenanceSchedules": [
+      { "assetType": "tunnel-conveyor-motor", "cadence": "monthly", "task": "lubricate bearings, inspect chain tension" },
+      { "assetType": "tunnel-conveyor-motor", "cadence": "annually", "task": "replace drive belt" },
+      { "assetType": "foam-applicator-arch", "cadence": "weekly", "task": "clear nozzle clogs, check chemical mix ratio" },
+      { "assetType": "water-reclaim-ro-system", "cadence": "monthly", "task": "replace reclaim filter media, check turbidity output" },
+      { "assetType": "air-compressor", "cadence": "monthly", "task": "drain moisture trap, check belt tension" },
+      { "assetType": "water-heater-boiler", "cadence": "quarterly", "task": "descale, inspect pressure relief valve" },
+      { "assetType": "dryer-blower-bank", "cadence": "monthly", "task": "clean intake filters, inspect blower bearings" },
+      { "assetType": "vacuum-station", "cadence": "weekly", "task": "empty canister, check motor filter" }
+    ],
+    "iotTelemetry": [
+      { "assetType": "tunnel-conveyor-motor", "signals": ["vibration", "current-draw", "runtime-hours"], "integrationId": "wash-sensor-platform" },
+      { "assetType": "water-reclaim-ro-system", "signals": ["flow-rate", "turbidity", "filter-pressure-differential"], "integrationId": "wash-sensor-platform" },
+      { "assetType": "air-compressor", "signals": ["pressure", "current-draw", "runtime-hours"], "integrationId": "wash-sensor-platform" },
+      { "assetType": "water-heater-boiler", "signals": ["temperature", "pressure"], "integrationId": "wash-sensor-platform" },
+      { "assetType": "dryer-blower-bank", "signals": ["rpm", "temperature", "vibration"], "integrationId": "wash-sensor-platform" }
+    ],
+    "predictiveMaintenance": true
+  }
+}

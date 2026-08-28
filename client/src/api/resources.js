@@ -39,6 +39,19 @@ export const bookingsApi = {
   updatePayment: (id, data) => apiClient.patch(`/bookings/${id}/payment`, data).then((r) => r.data),
 }
 
+export const washPackagesApi = makeResource('/wash-packages')
+export const serviceBaysApi = makeResource('/service-bays')
+
+export const washOrdersApi = {
+  ...makeResource('/wash-orders'),
+  assignBay: (id, bayId) => apiClient.patch(`/wash-orders/${id}/assign-bay`, bayId ? { bayId } : {}).then((r) => r.data),
+  startWash: (id) => apiClient.patch(`/wash-orders/${id}/start-wash`).then((r) => r.data),
+  completeWash: (id) => apiClient.patch(`/wash-orders/${id}/complete-wash`).then((r) => r.data),
+  qualityCheck: (id, result) => apiClient.patch(`/wash-orders/${id}/qc`, { result }).then((r) => r.data),
+  checkout: (id, paymentMethod) => apiClient.patch(`/wash-orders/${id}/checkout`, { paymentMethod }).then((r) => r.data),
+  cancel: (id) => apiClient.patch(`/wash-orders/${id}/cancel`).then((r) => r.data),
+}
+
 export const dashboardApi = {
   summary: () => apiClient.get('/dashboard/summary').then((r) => r.data),
   revenueChart: (days) => apiClient.get('/dashboard/revenue-chart', { params: { days } }).then((r) => r.data),

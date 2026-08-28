@@ -8,10 +8,12 @@ import {
   Receipt,
   BarChart3,
   Settings,
+  Waves,
 } from 'lucide-react'
 
 export const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'staff'] },
+  { to: '/wash-queue', label: 'Wash Queue', icon: Waves, roles: ['admin', 'manager', 'staff'] },
   { to: '/bookings', label: 'Bookings', icon: CalendarClock, roles: ['admin', 'manager', 'staff'] },
   { to: '/customers', label: 'Customers', icon: Users, roles: ['admin', 'manager', 'staff'] },
   { to: '/vehicles', label: 'Vehicles', icon: Car, roles: ['admin', 'manager', 'staff'] },

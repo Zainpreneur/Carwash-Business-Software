@@ -5,6 +5,7 @@ import DashboardLayout from './components/layout/DashboardLayout'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
+import WashQueue from './pages/WashQueue'
 import Bookings from './pages/Bookings'
 import Customers from './pages/Customers'
 import Vehicles from './pages/Vehicles'
@@ -28,6 +29,7 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<DashboardLayout />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/wash-queue" element={<WashQueue />} />
             <Route path="/bookings" element={<Bookings />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/vehicles" element={<Vehicles />} />

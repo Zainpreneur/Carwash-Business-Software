@@ -12,6 +12,9 @@ const bookingRoutes = require('./routes/bookingRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const washOrderRoutes = require('./routes/washOrderRoutes');
+const washPackageRoutes = require('./routes/washPackageRoutes');
+const serviceBayRoutes = require('./routes/serviceBayRoutes');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -40,6 +43,9 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/wash-orders', washOrderRoutes);
+app.use('/api/wash-packages', washPackageRoutes);
+app.use('/api/service-bays', serviceBayRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

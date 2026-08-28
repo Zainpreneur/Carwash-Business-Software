@@ -118,6 +118,27 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Bookings     | `GET/POST /bookings`, `GET/PUT/DELETE /bookings/:id`, `PATCH /bookings/:id/status`, `PATCH /bookings/:id/payment` |
 | Expenses     | `GET/POST /expenses`, `PUT/DELETE /expenses/:id` |
 | Dashboard    | `GET /dashboard/summary`, `/revenue-chart`, `/service-breakdown`, `/status-breakdown`, `/upcoming-bookings` |
+| Wash packages | `GET/POST /wash-packages`, `GET/PUT/DELETE /wash-packages/:id` (each carries 3-tier pricing) |
+| Service bays | `GET /service-bays`, `POST /service-bays`, `PUT/DELETE /service-bays/:id` |
+| Wash orders  | `GET/POST /wash-orders`, `GET/DELETE /wash-orders/:id`, `PATCH /wash-orders/:id/{assign-bay,start-wash,complete-wash,qc,checkout,cancel}` |
+
+## SplashPoint Wash Queue (spec Phase 1)
+
+`carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
+Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide recommends building
+in phases rather than all at once; **Phase 1 — the data model and primary wash lifecycle — is
+built and live** as an additive module alongside the existing booking-based app:
+
+- **Data model**: `WashPackage` (+ 3-tier `PackagePricing`), `ServiceBay`, `WashOrder` — see
+  `carwash-compile/01-foundation/data-model.md` for the source spec.
+- **Lifecycle** (`/wash-queue` in the sidebar): queue-entry → auto bay assignment (matched to
+  the package's tunnel/detail-bay lane) → start wash → complete wash → quality check
+  (pass → ready for pickup, fail → looped back to rework) → checkout, plus cancel from
+  Queued/BayAssigned. State transitions are enforced server-side (`washOrderController.js`).
+- **Not built yet** (later phases per the spec's own build order): role-specific dashboards
+  beyond this single queue view, RBAC beyond the existing admin/manager/staff roles,
+  `MembershipSubscription` billing, AI agents, IoT/predictive maintenance, WhatsApp/social/CRM,
+  the accounting ledger, and HR/payroll.
 
 ## Responsiveness
 
