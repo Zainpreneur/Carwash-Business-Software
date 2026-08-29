@@ -179,7 +179,8 @@ weights, five of the reporting cube's six named reports, and a real AR Aging rep
 by a genuine fleet-invoice collection workflow that didn't exist before this phase
 (`carwash-compile/02-intelligence/analytics.md`), a real append-only audit log covering
 WashOrder/MembershipSubscription/JournalEntry/Employee with genuine human- and
-agent-attributed actors (`carwash-compile/01-foundation/security.md`), a
+agent-attributed actors, and a real fleet-account-manager ABAC scoping rule added on top of
+this app's existing admin/manager/staff roles (`carwash-compile/01-foundation/security.md`), a
 real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that
 auto-posts from checkout, membership billing, expenses, payroll, and purchasing, a real
 staff roster with scheduling, leave, and a payroll run that posts to that same ledger
@@ -213,7 +214,9 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
 - **RBAC**: `GET /wash-orders` enforces server-side, not just in the UI — a `staff` request
   can never pull completed/cancelled orders (a specific *non-terminal* status like
   `ready-for-pickup` still narrows the result; `admin`/`manager` are unrestricted). Matches
-  the spec's Bay Attendant scoping: "'my queue today' only, not the full order history."
+  the spec's Bay Attendant scoping: "'my queue today' only, not the full order history." A
+  `fleet-account-manager` staff member is scoped differently still — see "fleet-account-manager
+  scoping" further down.
 - **Automations** (`carwash-compile/03-operations/automations.md`, `server/src/utils/automations.js`)
   — the 3 of 11 spec'd automations scoped to the primary lifecycle (the rest need
   entities/integrations not built yet):
@@ -670,20 +673,44 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
     `payrollService`'s payroll-run posting don't pass a real actor through yet — those
     `JournalEntry` rows log with `actorType: 'system'` rather than the staff member who
     triggered them, a documented gap rather than a silent one.
-- **Not built yet**: full financial statements beyond what AR Aging plus the existing
-  Finance/Ledger pages now cover (a P&L segmented by the cube's own dimensions, Cash Flow
-  detail), cohort & retention analysis, WoW/MoM/YoY benchmarking, the anomaly-detection rule
-  table, and the scheduled owner/site-manager digests (`02-intelligence/analytics.md`) — all
-  of which lean heavily on the scheduler this app doesn't have (see the reminder-jobs gap
-  below) for their "daily"/"weekly" cadences; the rest of the AI agent roster
-  (`predictive-maintenance-agent` and
+- **fleet-account-manager scoping** (`carwash-compile/01-foundation/security.md`'s ABAC
+  section, `server/src/utils/employeeScope.js`) — "Read/update on Customer and Invoice,
+  read-only on WashOrder - scoped to the fleet segment," added without migrating this app's
+  primary login role away from admin/manager/staff (see below for why that full migration
+  isn't done). A staff login's real operational position already lived on its linked
+  `Employee.position` since the HR phase; this reads that position to scope what a
+  `fleet-account-manager` staff member sees, additively, on top of the existing 'staff' role
+  rather than replacing it:
+  - `GET /customers` and `GET /customers/:id` return only `isFleetAccount` customers — a
+    direct request for a customer outside the segment 404s (not 403, so a
+    fleet-account-manager can't distinguish "exists but out of scope" from "doesn't exist").
+  - `GET /wash-orders` returns only `paymentMethod=fleet-invoice` orders, any status —
+    exempted from the "my queue today, non-terminal only" restriction every other staff
+    position gets, since billing/account history is a fundamentally different job than a live
+    bay queue.
+  - Every mutating `WashOrder` route (create, every lifecycle transition, cancel) 403s for
+    this position specifically — "read-only on WashOrder" enforced structurally, not just
+    documented.
+  - Seeded with a real account (`fiona@carwash.com` / `staff123`) to verify against, not just
+    a theoretical policy — every scenario above (scoped list, 404 on out-of-scope, 200 on
+    in-scope, 403 on write, other staff positions unaffected) was exercised against it.
+  - **Not built**: the same read/update-and-scope treatment for the `bay-attendant`/
+    `wash-technician`/`detail-technician` positions' "their assigned ServiceBay only" rule —
+    a real gap, left for a future pass rather than expanding this phase further.
+- **Not built yet**: the spec's full 7-role primary-login migration (Owner/Site Manager/Bay
+  Attendant/Wash Technician/Detail Technician/Cashier/Fleet Account Manager as the actual
+  session role, replacing admin/manager/staff) — a much larger, higher-regression-risk change
+  than the additive ABAC scoping above, since it would touch the `authorize()` gate on every
+  route this entire app has built across every phase; full financial statements beyond what
+  AR Aging plus the existing Finance/Ledger pages now cover (a P&L segmented by the cube's own
+  dimensions, Cash Flow detail), cohort & retention analysis, WoW/MoM/YoY benchmarking, the
+  anomaly-detection rule table, and the scheduled owner/site-manager digests
+  (`02-intelligence/analytics.md`) — all of which lean heavily on the scheduler this app
+  doesn't have (see the reminder-jobs gap below) for their "daily"/"weekly" cadences; the rest
+  of the AI agent roster (`predictive-maintenance-agent` and
   `quality-anomaly-detector` — need IoT telemetry this app has no sensors for; `phone-line-agent`
   — needs a real telephony API); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and
-  proactive SLA-breach alerting (need a scheduler this app doesn't run yet) —
-  and RBAC only covers this app's existing admin/manager/staff login roles, not the spec's
-  full 7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
-  Technician/Cashier/Fleet Account Manager) — the new `Employee.position` field captures the
-  job title, but doesn't yet drive what a person can actually do in the system.
+  proactive SLA-breach alerting (need a scheduler this app doesn't run yet).
 
 ## Responsiveness
 

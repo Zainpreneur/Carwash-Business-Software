@@ -8,6 +8,7 @@ const { notifyReadyForPickup, checkQueueWaitAlert } = require('../utils/automati
 const { newCustomerWelcomeDayZero, creditReferralIfFirstWash } = require('../utils/growthAutomations');
 const { postWashOrderCheckout, postFleetInvoiceCollection } = require('../services/ledgerService');
 const { logAudit } = require('../utils/auditLog');
+const { getEmployeePosition } = require('../utils/employeeScope');
 
 // wash-a-vehicle state machine (carwash-compile/01-foundation/data-model.md), kebab-cased
 // to match this app's convention: Queued=queued, BayAssigned=bay-assigned, InWash=in-wash,
@@ -75,11 +76,21 @@ const baseQuery = () =>
 const getWashOrders = asyncHandler(async (req, res) => {
   const { status, active, bay, date, customer, page = 1, limit = 50 } = req.query;
   const filters = [];
-  // RBAC (carwash-compile/01-foundation/dashboards.md, Bay Attendant): "my queue today"
-  // only, not the full order history — staff can never pull completed/cancelled orders
-  // through this endpoint, regardless of what status/active they request. Site-manager-
-  // level history (the /wash-queue "show completed & cancelled" view) is admin/manager only.
-  if (req.user.role === 'staff') {
+  const position = req.user.role === 'staff' ? await getEmployeePosition(req.user._id) : null;
+
+  // ABAC (01-foundation/security.md): "fleet-account-manager ... read-only on WashOrder -
+  // scoped to the fleet segment." A fundamentally different job function than the floor
+  // positions below (billing/account history, not a live bay queue), so it's exempted from
+  // the "my queue today" non-terminal restriction and instead scoped to fleet-invoice
+  // orders only, any status.
+  if (position === 'fleet-account-manager') {
+    filters.push(eq(washOrders.paymentMethod, 'fleet-invoice'));
+    if (status) filters.push(eq(washOrders.status, status));
+  } else if (req.user.role === 'staff') {
+    // RBAC (carwash-compile/01-foundation/dashboards.md, Bay Attendant): "my queue today"
+    // only, not the full order history — staff can never pull completed/cancelled orders
+    // through this endpoint, regardless of what status/active they request. Site-manager-
+    // level history (the /wash-queue "show completed & cancelled" view) is admin/manager only.
     // A specific non-terminal status (e.g. the Checkout page's ready-for-pickup) still
     // narrows the result; a terminal one is silently denied by falling back to "all active".
     filters.push(

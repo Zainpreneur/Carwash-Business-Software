@@ -94,6 +94,10 @@ const run = async () => {
       { name: 'John Staff', email: 'john@carwash.com', password: hash('staff123'), role: 'staff', phone: '555-0102', avatarColor: '#0891b2' },
       { name: 'Sara Staff', email: 'sara@carwash.com', password: hash('staff123'), role: 'staff', phone: '555-0103', avatarColor: '#ea580c' },
       { name: 'Mike Staff', email: 'mike@carwash.com', password: hash('staff123'), role: 'staff', phone: '555-0104', avatarColor: '#16a34a' },
+      // Fleet account manager — linked Employee.position drives the ABAC fleet-segment
+      // scoping in customerController/washOrderController (server/src/utils/employeeScope.js)
+      // since this app's login role is still admin/manager/staff, not the spec's 7 roles.
+      { name: 'Fiona Fleet', email: 'fiona@carwash.com', password: hash('staff123'), role: 'staff', phone: '555-0105', avatarColor: '#be185d' },
     ])
     .returning();
 
@@ -392,6 +396,7 @@ const run = async () => {
     { user: staffMembers[0]._id, name: staffMembers[0].name, phone: staffMembers[0].phone, position: 'bay-attendant', status: 'active', hireDate: new Date(now.getFullYear() - 1, 2, 10), hourlyRate: 16 },
     { user: staffMembers[1]._id, name: staffMembers[1].name, phone: staffMembers[1].phone, position: 'detail-technician', status: 'active', hireDate: new Date(now.getFullYear() - 1, 5, 1), hourlyRate: 18, commissionRate: 0.1 },
     { user: staffMembers[2]._id, name: staffMembers[2].name, phone: staffMembers[2].phone, position: 'cashier', status: 'active', hireDate: new Date(now.getFullYear(), 0, 15), hourlyRate: 15 },
+    { user: staffMembers[3]._id, name: staffMembers[3].name, phone: staffMembers[3].phone, position: 'fleet-account-manager', status: 'active', hireDate: new Date(now.getFullYear() - 1, 8, 1), hourlyRate: 20 },
     { user: insertedUsers[1]._id, name: insertedUsers[1].name, phone: insertedUsers[1].phone, position: 'site-manager', status: 'active', hireDate: new Date(now.getFullYear() - 2, 0, 1), annualSalary: 62000 },
     // An applicant with no login yet — shows the lifecycle's own point that Employee !=
     // a users/RBAC row.

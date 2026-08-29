@@ -3,16 +3,29 @@ const { eq, desc, or, ilike, count, inArray, and } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { customers, vehicles, bookings, membershipSubscriptions, membershipPlans, tickets } = require('../db/schema');
 const { withSla, OPEN_STATUSES } = require('../utils/tickets');
+const { getEmployeePosition } = require('../utils/employeeScope');
+
+// ABAC (01-foundation/security.md): "fleet-account-manager: Read/update on Customer ...
+// scoped to the fleet segment." A staff login whose linked Employee.position is
+// fleet-account-manager sees (and can look up) only fleet-commercial customers here — any
+// other staff position, or a staff user with no linked Employee row, is unaffected.
+const fleetScopeFilter = async (req) => {
+  if (req.user.role !== 'staff') return null;
+  const position = await getEmployeePosition(req.user._id);
+  return position === 'fleet-account-manager' ? eq(customers.isFleetAccount, true) : null;
+};
 
 const getCustomers = asyncHandler(async (req, res) => {
   const { search, page = 1, limit = 20 } = req.query;
-  const where = search
+  const searchFilter = search
     ? or(
         ilike(customers.name, `%${search}%`),
         ilike(customers.phone, `%${search}%`),
         ilike(customers.email, `%${search}%`)
       )
     : undefined;
+  const scopeFilter = await fleetScopeFilter(req);
+  const where = scopeFilter && searchFilter ? and(scopeFilter, searchFilter) : scopeFilter || searchFilter;
 
   const rows = await db
     .select()
@@ -29,6 +42,13 @@ const getCustomers = asyncHandler(async (req, res) => {
 const getCustomer = asyncHandler(async (req, res) => {
   const [customer] = await db.select().from(customers).where(eq(customers._id, req.params.id));
   if (!customer) {
+    res.status(404);
+    throw new Error('Customer not found');
+  }
+  const scopeFilter = await fleetScopeFilter(req);
+  if (scopeFilter && !customer.isFleetAccount) {
+    // 404, not 403 — a fleet-account-manager shouldn't be able to distinguish "exists but
+    // out of scope" from "doesn't exist" for a customer outside their segment.
     res.status(404);
     throw new Error('Customer not found');
   }
