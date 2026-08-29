@@ -40,7 +40,7 @@ const createExpense = asyncHandler(async (req, res) => {
     .values({ category, description, amount, date: date ? new Date(date) : undefined, createdBy: req.user._id })
     .returning();
 
-  postExpense(expense).catch((err) => console.error('[ledger] expense post failed:', err.message));
+  postExpense(expense, { actorType: 'user', actorId: req.user._id }).catch((err) => console.error('[ledger] expense post failed:', err.message));
 
   res.status(201).json({ ...expense, createdBy: { _id: req.user._id, name: req.user.name } });
 });
@@ -70,7 +70,7 @@ const deleteExpense = asyncHandler(async (req, res) => {
   }
   // Ledger entries are never mutated once posted — a reversing entry, not a deleted/edited
   // line (05-finance/accounting.md's own period-close posture).
-  reverseExpense(deleted[0]).catch((err) => console.error('[ledger] expense reversal post failed:', err.message));
+  reverseExpense(deleted[0], { actorType: 'user', actorId: req.user._id }).catch((err) => console.error('[ledger] expense reversal post failed:', err.message));
   res.json({ message: 'Expense removed' });
 });
 

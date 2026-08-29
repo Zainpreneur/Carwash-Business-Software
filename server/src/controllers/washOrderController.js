@@ -7,6 +7,7 @@ const { findOpenBay } = require('../utils/bays');
 const { notifyReadyForPickup, checkQueueWaitAlert } = require('../utils/automations');
 const { newCustomerWelcomeDayZero, creditReferralIfFirstWash } = require('../utils/growthAutomations');
 const { postWashOrderCheckout, postFleetInvoiceCollection } = require('../services/ledgerService');
+const { logAudit } = require('../utils/auditLog');
 
 // wash-a-vehicle state machine (carwash-compile/01-foundation/data-model.md), kebab-cased
 // to match this app's convention: Queued=queued, BayAssigned=bay-assigned, InWash=in-wash,
@@ -231,6 +232,8 @@ const createWashOrder = asyncHandler(async (req, res) => {
   ).catch(() => {});
   checkQueueWaitAlert(req.user._id).catch(() => {});
 
+  logAudit({ entity: 'wash_order', entityId: order._id, action: 'create', actorType: 'user', actorId: req.user._id, after: order });
+
   const [full] = await baseQuery().where(eq(washOrders._id, order._id));
   res.status(201).json(full);
 });
@@ -251,8 +254,21 @@ const requireStatus = async (res, id, expected) => {
   return order;
 };
 
-const respondUpdated = async (res, id) => {
+// Every lifecycle transition below (assignBay/startWash/completeWash/qualityCheck/checkout/
+// cancelWashOrder) already fetches the pre-transition row via requireStatus — this is the
+// single point after each transition that re-fetches it, so it's also the one place that
+// needs to log the audit-log update entry (01-foundation/security.md), rather than repeating
+// a before/after diff at all six call sites.
+const respondUpdated = async (res, id, { before, actorId } = {}) => {
   const [full] = await baseQuery().where(eq(washOrders._id, id));
+  if (before) {
+    // `before` is a raw row (requireStatus selects from washOrders directly); `full` is the
+    // joined/formatted shape the API returns (bay/package/vehicle as nested objects). Diffing
+    // those directly against each other would show every relation as "changed" even when it
+    // isn't — a raw row for `after` too keeps the audit diff meaningful field-by-field.
+    const [rawAfter] = await db.select().from(washOrders).where(eq(washOrders._id, id));
+    logAudit({ entity: 'wash_order', entityId: id, action: 'update', actorType: 'user', actorId, before, after: rawAfter });
+  }
   res.json(full);
 };
 
@@ -286,7 +302,7 @@ const assignBay = asyncHandler(async (req, res) => {
     .where(eq(washOrders._id, order._id));
   checkQueueWaitAlert(req.user._id).catch(() => {});
 
-  await respondUpdated(res, order._id);
+  await respondUpdated(res, order._id, { before: order, actorId: req.user._id });
 });
 
 const startWash = asyncHandler(async (req, res) => {
@@ -304,7 +320,7 @@ const startWash = asyncHandler(async (req, res) => {
       updatedAt: new Date(),
     })
     .where(eq(washOrders._id, order._id));
-  await respondUpdated(res, order._id);
+  await respondUpdated(res, order._id, { before: order, actorId: req.user._id });
 });
 
 const completeWash = asyncHandler(async (req, res) => {
@@ -313,7 +329,7 @@ const completeWash = asyncHandler(async (req, res) => {
     .update(washOrders)
     .set({ status: 'quality-check', washCompletedAt: new Date(), updatedAt: new Date() })
     .where(eq(washOrders._id, order._id));
-  await respondUpdated(res, order._id);
+  await respondUpdated(res, order._id, { before: order, actorId: req.user._id });
 });
 
 // qc-passed -> ready-for-pickup ; qc-failed-rework -> back to in-wash, no extra charge
@@ -340,7 +356,7 @@ const qualityCheck = asyncHandler(async (req, res) => {
     notifyReadyForPickup(order).catch(() => {}); // notify-ready-for-pickup automation
   }
 
-  await respondUpdated(res, order._id);
+  await respondUpdated(res, order._id, { before: order, actorId: req.user._id });
 });
 
 const checkout = asyncHandler(async (req, res) => {
@@ -394,11 +410,11 @@ const checkout = asyncHandler(async (req, res) => {
 
   // Auto-posting rule (05-finance/accounting.md) — checkout is the spec's own first example
   // of a workflow step that moves money.
-  postWashOrderCheckout({ ...order, paymentMethod: paymentMethod || order.paymentMethod }).catch((err) =>
+  postWashOrderCheckout({ ...order, paymentMethod: paymentMethod || order.paymentMethod }, { actorType: 'user', actorId: req.user._id }).catch((err) =>
     console.error('[ledger] wash order checkout post failed:', err.message)
   );
 
-  await respondUpdated(res, order._id);
+  await respondUpdated(res, order._id, { before: order, actorId: req.user._id });
 });
 
 // AR collection (02-intelligence/analytics.md's AR Aging report needs a "collected" event to
@@ -423,7 +439,8 @@ const collectFleetInvoice = asyncHandler(async (req, res) => {
     .set({ fleetInvoiceCollectedAt: new Date(), updatedAt: new Date() })
     .where(eq(washOrders._id, order._id))
     .returning();
-  postFleetInvoiceCollection(order).catch((err) => console.error('[ledger] fleet invoice collection post failed:', err.message));
+  postFleetInvoiceCollection(order, { actorType: 'user', actorId: req.user._id }).catch((err) => console.error('[ledger] fleet invoice collection post failed:', err.message));
+  logAudit({ entity: 'wash_order', entityId: order._id, action: 'update', actorType: 'user', actorId: req.user._id, before: order, after: updated });
   res.json(updated);
 });
 
@@ -434,7 +451,7 @@ const cancelWashOrder = asyncHandler(async (req, res) => {
     .set({ status: 'cancelled', updatedAt: new Date() })
     .where(eq(washOrders._id, order._id));
   checkQueueWaitAlert(req.user._id).catch(() => {});
-  await respondUpdated(res, order._id);
+  await respondUpdated(res, order._id, { before: order, actorId: req.user._id });
 });
 
 const deleteWashOrder = asyncHandler(async (req, res) => {
@@ -443,6 +460,7 @@ const deleteWashOrder = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Wash order not found');
   }
+  logAudit({ entity: 'wash_order', entityId: req.params.id, action: 'delete', actorType: 'user', actorId: req.user._id, before: deleted[0] });
   res.json({ message: 'Wash order removed' });
 });
 

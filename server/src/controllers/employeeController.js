@@ -2,6 +2,7 @@ const asyncHandler = require('express-async-handler');
 const { eq, desc } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { employees, users } = require('../db/schema');
+const { logAudit } = require('../utils/auditLog');
 
 // Employee lifecycle (03-operations/hr.md): Applicant -> Hired -> Onboarding -> Active ->
 // On Leave -> Offboarded. Loosely ordered, not strictly enforced like WashOrder/Ticket's
@@ -73,10 +74,12 @@ const createEmployee = asyncHandler(async (req, res) => {
       emergencyContactPhone: rest.emergencyContactPhone,
     })
     .returning();
+  logAudit({ entity: 'employee', entityId: created._id, action: 'create', actorType: 'user', actorId: req.user._id, after: created });
   res.status(201).json(created);
 });
 
 const updateEmployee = asyncHandler(async (req, res) => {
+  const [before] = await db.select().from(employees).where(eq(employees._id, req.params.id));
   const allowed = [
     'user', 'name', 'phone', 'email', 'position', 'status', 'hireDate',
     'hourlyRate', 'annualSalary', 'commissionRate', 'emergencyContactName', 'emergencyContactPhone',
@@ -101,6 +104,7 @@ const updateEmployee = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Employee not found');
   }
+  logAudit({ entity: 'employee', entityId: updated._id, action: 'update', actorType: 'user', actorId: req.user._id, before, after: updated });
   res.json(updated);
 });
 
@@ -110,6 +114,7 @@ const deleteEmployee = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Employee not found');
   }
+  logAudit({ entity: 'employee', entityId: req.params.id, action: 'delete', actorType: 'user', actorId: req.user._id, before: deleted[0] });
   res.json({ message: 'Employee removed' });
 });
 

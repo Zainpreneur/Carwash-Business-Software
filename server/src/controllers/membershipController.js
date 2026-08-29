@@ -4,6 +4,7 @@ const { db } = require('../config/db');
 const { membershipPlans, membershipSubscriptions, customers, vehicles } = require('../db/schema');
 const { getStripe, isStripeConfigured } = require('../config/stripe');
 const membershipService = require('../services/membershipService');
+const { logAudit } = require('../utils/auditLog');
 
 const ACTIVE_SUB_STATUSES = ['active', 'past-due', 'suspended', 'paused'];
 
@@ -165,7 +166,7 @@ const getSubscriptions = asyncHandler(async (req, res) => {
 const createSubscription = asyncHandler(async (req, res) => {
   const { customer: customerId, vehicle: vehicleId, plan: planId, successUrl, cancelUrl } = req.body;
   try {
-    const result = await membershipService.createSubscription({ customerId, vehicleId, planId, successUrl, cancelUrl });
+    const result = await membershipService.createSubscription({ customerId, vehicleId, planId, successUrl, cancelUrl }, { actorType: 'user', actorId: req.user._id });
     res.status(result.mode === 'stripe' ? 200 : 201).json(result);
   } catch (err) {
     res.status(err.status || 500);
@@ -204,6 +205,7 @@ const pauseSubscription = asyncHandler(async (req, res) => {
     .set({ status: 'paused', pausedUntil: pausedUntil ? new Date(pausedUntil) : null, updatedAt: new Date() })
     .where(eq(membershipSubscriptions._id, sub._id))
     .returning();
+  logAudit({ entity: 'membership_subscription', entityId: sub._id, action: 'update', actorType: 'user', actorId: req.user._id, before: sub, after: updated });
   res.json(updated);
 });
 
@@ -223,6 +225,7 @@ const resumeSubscription = asyncHandler(async (req, res) => {
     .set({ status: 'active', pausedUntil: null, updatedAt: new Date() })
     .where(eq(membershipSubscriptions._id, sub._id))
     .returning();
+  logAudit({ entity: 'membership_subscription', entityId: sub._id, action: 'update', actorType: 'user', actorId: req.user._id, before: sub, after: updated });
   res.json(updated);
 });
 
@@ -238,6 +241,7 @@ const markPaidManually = asyncHandler(async (req, res) => {
     .set({ status: 'active', failedPaymentAttempts: 0, firstFailedAt: null, updatedAt: new Date() })
     .where(eq(membershipSubscriptions._id, sub._id))
     .returning();
+  logAudit({ entity: 'membership_subscription', entityId: sub._id, action: 'update', actorType: 'user', actorId: req.user._id, before: sub, after: updated });
   res.json(updated);
 });
 
@@ -259,6 +263,7 @@ const cancelSubscription = asyncHandler(async (req, res) => {
     .set({ status: 'cancelled', updatedAt: new Date() })
     .where(eq(membershipSubscriptions._id, sub._id))
     .returning();
+  logAudit({ entity: 'membership_subscription', entityId: sub._id, action: 'update', actorType: 'user', actorId: req.user._id, before: sub, after: updated });
   res.json(updated);
 });
 

@@ -10,6 +10,7 @@ const { membershipPaymentFailedDunning, membershipSuspended, membershipCancelled
 const { postMembershipCharge } = require('../services/ledgerService');
 const { evaluateFailedPayment, evaluateSucceededPayment } = require('../agents/membershipBillingAgent');
 const { recordAgentEvent } = require('../utils/agentMetrics');
+const { logAudit } = require('../utils/auditLog');
 
 const nextMonth = (from = new Date()) => {
   const d = new Date(from);
@@ -35,6 +36,7 @@ const handleCheckoutCompleted = async (session) => {
     })
     .returning();
 
+  logAudit({ entity: 'membership_subscription', entityId: created._id, action: 'create', actorType: 'system', actorId: 'stripe-webhook', after: created });
   await sendMembershipWelcome(created);
 };
 
@@ -59,6 +61,7 @@ const handlePaymentFailed = async (invoice) => {
     .where(eq(membershipSubscriptions._id, sub._id))
     .returning();
   recordAgentEvent('membership-billing-agent', 'deterministic', decision.status === 'suspended' || decision.status === 'cancelled');
+  logAudit({ entity: 'membership_subscription', entityId: sub._id, action: 'update', actorType: 'agent', actorId: 'membership-billing-agent', before: sub, after: updated });
 
   if (decision.status === 'cancelled') {
     if (sub.stripeSubscriptionId && isStripeConfigured()) {
@@ -81,7 +84,7 @@ const handlePaymentSucceeded = async (invoice) => {
   if (!sub) return;
 
   const decision = ['past-due', 'suspended'].includes(sub.status) ? evaluateSucceededPayment() : { status: sub.status, failedPaymentAttempts: 0, firstFailedAt: null };
-  await db
+  const [updated] = await db
     .update(membershipSubscriptions)
     .set({
       ...decision,
@@ -89,14 +92,16 @@ const handlePaymentSucceeded = async (invoice) => {
       nextBillingDate: nextMonth(),
       updatedAt: new Date(),
     })
-    .where(eq(membershipSubscriptions._id, sub._id));
+    .where(eq(membershipSubscriptions._id, sub._id))
+    .returning();
+  logAudit({ entity: 'membership_subscription', entityId: sub._id, action: 'update', actorType: 'agent', actorId: 'membership-billing-agent', before: sub, after: updated });
 
   // Auto-posting rule (05-finance/accounting.md) — posted here rather than on
   // checkout.session.completed above so a brand-new subscription's first charge is only
   // posted once: Stripe fires invoice.payment_succeeded for that first invoice too, and this
   // event carries the actual amount charged (invoice.amount_paid), not just the plan's
   // sticker price — accurate through proration, coupons, etc.
-  postMembershipCharge(sub, invoice.amount_paid / 100, `Membership charge (invoice ${invoice.id})`).catch((err) =>
+  postMembershipCharge(sub, invoice.amount_paid / 100, `Membership charge (invoice ${invoice.id})`, { actorType: 'system', actorId: 'stripe-webhook' }).catch((err) =>
     console.error('[ledger] membership charge post failed:', err.message)
   );
 };

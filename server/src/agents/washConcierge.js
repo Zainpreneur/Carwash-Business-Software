@@ -43,6 +43,7 @@ const { notifyRoles } = require('../utils/notify');
 const membershipService = require('../services/membershipService');
 const { getStripe, isStripeConfigured } = require('../config/stripe');
 const { recordAgentEvent } = require('../utils/agentMetrics');
+const { logAudit } = require('../utils/auditLog');
 
 // escalate_to_human's reason -> Ticket.category (04-growth/crm.md's category list). "other"
 // and "negative-sentiment"/"low-confidence" don't map to a specific SLA-bearing category, so
@@ -206,11 +207,10 @@ const executeTool = async (name, input, ctx) => {
       const vehicle = vehicleRows.find((v) => v.plateNumber.toUpperCase() === String(input.vehiclePlate).toUpperCase());
       if (!vehicle) return { error: 'vehicle_not_found' };
       try {
-        const result = await membershipService.createSubscription({
-          customerId: ctx.customer._id,
-          vehicleId: vehicle._id,
-          planId: input.planId,
-        });
+        const result = await membershipService.createSubscription(
+          { customerId: ctx.customer._id, vehicleId: vehicle._id, planId: input.planId },
+          { actorType: 'agent', actorId: 'wash-concierge' }
+        );
         return result;
       } catch (err) {
         return { error: err.message };
@@ -230,7 +230,8 @@ const executeTool = async (name, input, ctx) => {
         if (sub.stripeSubscriptionId && isStripeConfigured()) {
           await getStripe().subscriptions.update(sub.stripeSubscriptionId, { pause_collection: { behavior: 'void' } }).catch(() => {});
         }
-        await db.update(membershipSubscriptions).set({ status: 'paused', updatedAt: new Date() }).where(eq(membershipSubscriptions._id, sub._id));
+        const [pausedSub] = await db.update(membershipSubscriptions).set({ status: 'paused', updatedAt: new Date() }).where(eq(membershipSubscriptions._id, sub._id)).returning();
+        logAudit({ entity: 'membership_subscription', entityId: sub._id, action: 'update', actorType: 'agent', actorId: 'wash-concierge', before: sub, after: pausedSub });
         return { ok: true, status: 'paused' };
       }
 
@@ -238,7 +239,8 @@ const executeTool = async (name, input, ctx) => {
       if (sub.stripeSubscriptionId && isStripeConfigured()) {
         await getStripe().subscriptions.cancel(sub.stripeSubscriptionId).catch(() => {});
       }
-      await db.update(membershipSubscriptions).set({ status: 'cancelled', updatedAt: new Date() }).where(eq(membershipSubscriptions._id, sub._id));
+      const [cancelledSub] = await db.update(membershipSubscriptions).set({ status: 'cancelled', updatedAt: new Date() }).where(eq(membershipSubscriptions._id, sub._id)).returning();
+      logAudit({ entity: 'membership_subscription', entityId: sub._id, action: 'update', actorType: 'agent', actorId: 'wash-concierge', before: sub, after: cancelledSub });
       return { ok: true, status: 'cancelled' };
     }
 

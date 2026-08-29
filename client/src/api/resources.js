@@ -177,6 +177,10 @@ export const analyticsApi = {
   },
 }
 
+export const auditLogApi = {
+  list: (params) => apiClient.get('/audit-log', { params }).then((r) => r.data),
+}
+
 export const ticketsApi = {
   list: (params) => apiClient.get('/tickets', { params }).then((r) => r.data),
   get: (id) => apiClient.get(`/tickets/${id}`).then((r) => r.data),

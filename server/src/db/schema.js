@@ -769,6 +769,35 @@ const healthScoreWeights = pgTable('health_score_weights', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Audit log (01-foundation/security.md's "Audit" section): "every create/update/delete on
+// WashOrder, Invoice, Payment, MembershipSubscription, JournalEntry, and Employee writes to
+// an append-only audit log: actor (role or agent id), timestamp, before/after diff. Agent
+// actions are logged identically to human ones." This app has no separate Invoice/Payment
+// entities (fleet billing is a WashOrder.paymentMethod tag posting straight to the ledger,
+// and membership charges post directly too — see ledgerService's own header comment), so
+// this covers the four entities that actually exist: WashOrder, MembershipSubscription,
+// JournalEntry, and Employee. Append-only in practice, not just in name: nothing in this
+// app ever updates or deletes a row here.
+const auditLogs = pgTable('audit_logs', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  // entity: wash_order | membership_subscription | journal_entry | employee
+  entity: text('entity').notNull(),
+  entityId: uuid('entity_id').notNull(),
+  // action: create | update | delete
+  action: text('action').notNull(),
+  // actorType: user | agent | system — "system" covers a Stripe webhook event, which isn't a
+  // human action or an agent judgment call, just an external event applying a state
+  // transition the spec itself already defines (membershipBillingAgent's state machine).
+  actorType: text('actor_type').notNull(),
+  // actorId: a real Users._id for actorType=user, or a stable agent-name string (e.g.
+  // "membership-billing-agent") for actorType=agent/system — not a foreign key, since an
+  // agent has no row in the users table to reference.
+  actorId: text('actor_id'),
+  before: jsonb('before'),
+  after: jsonb('after'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -808,4 +837,5 @@ module.exports = {
   reviews,
   knowledgeArticles,
   healthScoreWeights,
+  auditLogs,
 };

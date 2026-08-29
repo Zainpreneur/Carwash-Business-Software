@@ -143,6 +143,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Knowledge Base | `GET /knowledge-base`, `GET /knowledge-base/:id` (any authenticated role), `POST /knowledge-base`, `PATCH/DELETE /knowledge-base/:id` (admin/manager) |
 | Documents | `GET /documents/wash-receipt/:orderId`, `GET /documents/membership-agreement/:subscriptionId`, `GET /documents/wash-package-comparison` (any authenticated role) |
 | Analytics | `GET /analytics/health-score` (admin/manager), `PATCH /analytics/health-score/weights` (admin only), `GET /analytics/reports/{revenue-by-bay-daily,membership-mix-weekly,package-tier-margin,aov-by-vehicle-type,technician-throughput,ar-aging}` (admin/manager) |
+| Audit log | `GET /audit-log` (admin/manager) — filter with `?entity=`, one of `wash_order`\|`membership_subscription`\|`journal_entry`\|`employee` |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -151,7 +152,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
 | HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision`, `GET/POST /hr/payroll-runs`, `GET /hr/payroll-runs/:id` (admin/manager) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth, knowledge base, analytics)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth, knowledge base, analytics, audit log)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
@@ -176,7 +177,9 @@ documents rendered from live records (`carwash-compile/06-platform/knowledge-bas
 real business health score computed from the spec's own KPI formulas with owner-editable
 weights, five of the reporting cube's six named reports, and a real AR Aging report backed
 by a genuine fleet-invoice collection workflow that didn't exist before this phase
-(`carwash-compile/02-intelligence/analytics.md`), a
+(`carwash-compile/02-intelligence/analytics.md`), a real append-only audit log covering
+WashOrder/MembershipSubscription/JournalEntry/Employee with genuine human- and
+agent-attributed actors (`carwash-compile/01-foundation/security.md`), a
 real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that
 auto-posts from checkout, membership billing, expenses, payroll, and purchasing, a real
 staff roster with scheduling, leave, and a payroll run that posts to that same ledger
@@ -636,6 +639,37 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
   ledger entry (`ledgerService.postFleetInvoiceCollection`). `/reports`' AR Aging card buckets
   every uncollected fleet invoice by age (current/15-30/30-45/45+) with a "Mark collected"
   action per invoice.
+- **Audit log** (`carwash-compile/01-foundation/security.md`'s "Audit" section,
+  `server/src/utils/auditLog.js`) — "every create/update/delete on WashOrder, Invoice,
+  Payment, MembershipSubscription, JournalEntry, and Employee writes to an append-only audit
+  log: actor, timestamp, before/after diff. Agent actions are logged identically to human
+  ones." This app has no separate Invoice/Payment entities (fleet billing and membership
+  charges post straight to the ledger — see `ledgerService`'s own header comment), so this
+  covers the four that actually exist.
+  - `JournalEntry` logs from a single choke point — `ledgerService.postEntry`, the only way a
+    journal entry is ever created — rather than being repeated at every posting function's
+    call site.
+  - Real agent-actor entries, not a placeholder: `wash-concierge`'s `start_membership_signup`
+    and `manage_membership` tools (both already built, in earlier phases) now log with
+    `actorType: 'agent', actorId: 'wash-concierge'` when they create, pause, or cancel a
+    subscription over WhatsApp — the spec's own "agent actions logged identically to human
+    ones" requirement, demonstrated with a real existing agent rather than a synthetic
+    example. Stripe-webhook-driven transitions (`membership-billing-agent`'s automatic
+    suspend/cancel state machine, and the checkout-completed subscription creation) log with
+    `actorType: 'agent'`/`'system'` respectively — the actor field genuinely reflects who or
+    what triggered each row, not a single hardcoded value.
+  - Diffing `before`/`after` required care: the first version of this compared a raw DB row
+    (`before`) against the joined/formatted shape the API returns (`after`, with
+    bay/package/vehicle as nested objects) and showed every relation as "changed" even when
+    it wasn't. Fixed by fetching a second raw row for the audit snapshot, kept separate from
+    the joined response the client actually renders.
+  - `/audit-log` (admin/manager) — filterable by entity, each row opens a diff view showing
+    only the fields that actually changed (skipping `createdAt`/`updatedAt` noise), not a raw
+    JSON dump of the whole row.
+  - **Not built**: `inventoryService`'s purchase-order/stock-adjustment ledger postings and
+    `payrollService`'s payroll-run posting don't pass a real actor through yet — those
+    `JournalEntry` rows log with `actorType: 'system'` rather than the staff member who
+    triggered them, a documented gap rather than a silent one.
 - **Not built yet**: full financial statements beyond what AR Aging plus the existing
   Finance/Ledger pages now cover (a P&L segmented by the cube's own dimensions, Cash Flow
   detail), cohort & retention analysis, WoW/MoM/YoY benchmarking, the anomaly-detection rule
