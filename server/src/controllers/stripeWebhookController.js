@@ -11,6 +11,7 @@ const { postMembershipCharge } = require('../services/ledgerService');
 const { evaluateFailedPayment, evaluateSucceededPayment } = require('../agents/membershipBillingAgent');
 const { recordAgentEvent } = require('../utils/agentMetrics');
 const { logAudit } = require('../utils/auditLog');
+const { fireWebhookEvent } = require('../services/webhookService');
 
 const nextMonth = (from = new Date()) => {
   const d = new Date(from);
@@ -68,6 +69,7 @@ const handlePaymentFailed = async (invoice) => {
       await getStripe().subscriptions.cancel(sub.stripeSubscriptionId).catch((err) => console.error('[stripe] cancel-for-nonpayment failed:', err.message));
     }
     await membershipCancelledForNonPayment(updated);
+    fireWebhookEvent('membership-cancelled', { subscriptionId: sub._id, customerId: sub.customer, cancelledAt: new Date().toISOString() }).catch(() => {});
   } else if (decision.status === 'suspended' && sub.status !== 'suspended') {
     await membershipSuspended(updated); // only notify on the transition *into* suspended, not every retry after
   } else {

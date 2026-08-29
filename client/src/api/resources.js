@@ -177,6 +177,23 @@ export const analyticsApi = {
   },
 }
 
+export const platformApi = {
+  apiKeys: {
+    list: () => apiClient.get('/platform/api-keys').then((r) => r.data),
+    create: (data) => apiClient.post('/platform/api-keys', data).then((r) => r.data),
+    revoke: (id) => apiClient.patch(`/platform/api-keys/${id}/revoke`).then((r) => r.data),
+  },
+  webhooks: {
+    list: () => apiClient.get('/platform/webhook-subscriptions').then((r) => r.data),
+    create: (data) => apiClient.post('/platform/webhook-subscriptions', data).then((r) => r.data),
+    remove: (id) => apiClient.delete(`/platform/webhook-subscriptions/${id}`).then((r) => r.data),
+  },
+  deliveries: {
+    list: () => apiClient.get('/platform/webhook-deliveries').then((r) => r.data),
+    replay: (id) => apiClient.post(`/platform/webhook-deliveries/${id}/replay`).then((r) => r.data),
+  },
+}
+
 export const auditLogApi = {
   list: (params) => apiClient.get('/audit-log', { params }).then((r) => r.data),
 }

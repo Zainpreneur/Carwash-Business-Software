@@ -18,6 +18,7 @@ const { eq, and, gte } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { supplies, packageSupplyUsage, washOrders, purchaseOrders, purchaseOrderLines } = require('../db/schema');
 const { recordAgentEvent } = require('../utils/agentMetrics');
+const { fireWebhookEvent } = require('../services/webhookService');
 
 const TRAILING_DAYS = 7;
 const PAR_LEVEL_DAYS = 30;
@@ -79,6 +80,14 @@ const computeRecommendations = async () => {
 // still surfaced by computeRecommendations() for a human to act on, just excluded here.
 const createPurchaseOrdersFromRecommendations = async (createdBy) => {
   const recommendations = await computeRecommendations();
+  // 06-platform/api-webhooks.md's stock-low event: "quantity crosses below reorderThreshold"
+  // — this app's real reorder threshold is the computed 7-day-supply figure above, not a
+  // static field, so it fires here (when the app actually acts on a low-stock condition by
+  // drafting a PO) rather than on every read of computeRecommendations() (GET
+  // /inventory/forecast is a preview and shouldn't spam a partner's webhook on every poll).
+  for (const rec of recommendations) {
+    fireWebhookEvent('stock-low', { itemId: rec.supply._id, warehouseId: rec.supply.warehouse, quantity: rec.supply.quantityOnHand }).catch(() => {});
+  }
   const bySupplier = new Map();
   for (const rec of recommendations) {
     if (!rec.supply.supplier) continue;

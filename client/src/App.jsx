@@ -26,6 +26,7 @@ import OpsCenter from './pages/OpsCenter'
 import Growth from './pages/Growth'
 import KnowledgeBase from './pages/KnowledgeBase'
 import AuditLog from './pages/AuditLog'
+import Platform from './pages/Platform'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
 
@@ -66,6 +67,10 @@ function App() {
               <Route path="/ops-center" element={<OpsCenter />} />
               <Route path="/growth" element={<Growth />} />
               <Route path="/audit-log" element={<AuditLog />} />
+
+              <Route element={<RoleRoute roles={['admin']} />}>
+                <Route path="/platform" element={<Platform />} />
+              </Route>
             </Route>
           </Route>
         </Route>

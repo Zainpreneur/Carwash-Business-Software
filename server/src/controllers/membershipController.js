@@ -5,6 +5,7 @@ const { membershipPlans, membershipSubscriptions, customers, vehicles } = requir
 const { getStripe, isStripeConfigured } = require('../config/stripe');
 const membershipService = require('../services/membershipService');
 const { logAudit } = require('../utils/auditLog');
+const { fireWebhookEvent } = require('../services/webhookService');
 
 const ACTIVE_SUB_STATUSES = ['active', 'past-due', 'suspended', 'paused'];
 
@@ -264,8 +265,10 @@ const cancelSubscription = asyncHandler(async (req, res) => {
     .where(eq(membershipSubscriptions._id, sub._id))
     .returning();
   logAudit({ entity: 'membership_subscription', entityId: sub._id, action: 'update', actorType: 'user', actorId: req.user._id, before: sub, after: updated });
+  fireWebhookEvent('membership-cancelled', { subscriptionId: sub._id, customerId: sub.customer, cancelledAt: new Date().toISOString() }).catch(() => {});
   res.json(updated);
 });
+
 
 module.exports = {
   getPlans,

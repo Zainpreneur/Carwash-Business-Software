@@ -9,6 +9,7 @@ const { newCustomerWelcomeDayZero, creditReferralIfFirstWash } = require('../uti
 const { postWashOrderCheckout, postFleetInvoiceCollection } = require('../services/ledgerService');
 const { logAudit } = require('../utils/auditLog');
 const { getEmployeePosition } = require('../utils/employeeScope');
+const { fireWebhookEvent } = require('../services/webhookService');
 
 // wash-a-vehicle state machine (carwash-compile/01-foundation/data-model.md), kebab-cased
 // to match this app's convention: Queued=queued, BayAssigned=bay-assigned, InWash=in-wash,
@@ -365,6 +366,7 @@ const qualityCheck = asyncHandler(async (req, res) => {
       req.user._id
     ).catch(() => {});
     notifyReadyForPickup(order).catch(() => {}); // notify-ready-for-pickup automation
+    fireWebhookEvent('wash-order-ready', { washOrderId: order._id, vehicleId: order.vehicle, readyAt: new Date().toISOString() }).catch(() => {});
   }
 
   await respondUpdated(res, order._id, { before: order, actorId: req.user._id });
@@ -424,6 +426,7 @@ const checkout = asyncHandler(async (req, res) => {
   postWashOrderCheckout({ ...order, paymentMethod: paymentMethod || order.paymentMethod }, { actorType: 'user', actorId: req.user._id }).catch((err) =>
     console.error('[ledger] wash order checkout post failed:', err.message)
   );
+  fireWebhookEvent('wash-order-completed', { washOrderId: order._id, completedAt: new Date().toISOString(), amount: order.price }).catch(() => {});
 
   await respondUpdated(res, order._id, { before: order, actorId: req.user._id });
 });

@@ -22,6 +22,7 @@ import {
   Megaphone,
   BookOpen,
   ScrollText,
+  Plug,
 } from 'lucide-react'
 
 // Role-based wash-floor views (carwash-compile/01-foundation/dashboards.md):
@@ -51,5 +52,6 @@ export const navItems = [
   { to: '/growth', label: 'Growth', icon: Megaphone, roles: ['admin', 'manager'] },
   { to: '/knowledge-base', label: 'Knowledge Base', icon: BookOpen, roles: ['admin', 'manager', 'staff'] },
   { to: '/audit-log', label: 'Audit Log', icon: ScrollText, roles: ['admin', 'manager'] },
+  { to: '/platform', label: 'Platform API', icon: Plug, roles: ['admin'] },
   { to: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'manager', 'staff'] },
 ]

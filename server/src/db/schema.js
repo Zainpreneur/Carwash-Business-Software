@@ -798,6 +798,70 @@ const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Platform API & Webhooks (06-platform/api-webhooks.md) — "a light but real API surface... the
+// fleet segment and a future companion mobile app both need something to integrate against."
+// Only the raw key's SHA-256 hash is ever stored (`keyHash`) — the plaintext key is shown to
+// the admin exactly once, at creation, same handling as any real API-key system. `keyPrefix`
+// (the first 8 chars) is kept in the clear purely so the admin UI can show "which key is
+// this" in a list without ever re-displaying the secret.
+const apiKeys = pgTable('api_keys', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  keyHash: text('key_hash').notNull().unique(),
+  keyPrefix: text('key_prefix').notNull(),
+  // scope: orders-readwrite | fleet-account-readonly — the spec's own two named scopes,
+  // "each constrained exactly like the human role it mirrors, including the same ABAC
+  // policies" — fleet-account-readonly reuses this app's real fleet-account-manager ABAC
+  // scoping (server/src/utils/employeeScope.js's fleetScopeFilter logic), not a separate
+  // reimplementation.
+  scope: text('scope').notNull(),
+  // Required (and only meaningful) for scope=fleet-account-readonly — which fleet account
+  // this key is allowed to see, the same "scoped to the fleet segment" boundary a human
+  // fleet-account-manager operates within, per-partner rather than shop-wide.
+  fleetCustomer: uuid('fleet_customer_id').references(() => customers._id, { onDelete: 'cascade' }),
+  active: boolean('active').notNull().default(true),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Outbound webhook subscriptions — one row per subscriber URL, `events` names which of the
+// spec's four events it wants (wash-order-ready | wash-order-completed | membership-cancelled
+// | stock-low). `secret` HMAC-signs every payload sent to `url`, per-subscriber as the spec
+// asks.
+const webhookSubscriptions = pgTable('webhook_subscriptions', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  url: text('url').notNull(),
+  secret: text('secret').notNull(),
+  events: jsonb('events').notNull(),
+  active: boolean('active').notNull().default(true),
+  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Delivery log — what actually makes an event "replayable by event ID rather than leaving a
+// subscriber to reconstruct state," per the spec's own text: eventId is stable across every
+// retry attempt for the same firing, and a stored row can be manually replayed later without
+// re-deriving the payload from scratch. Retries here are immediate, in-process (a few
+// attempts with backoff) rather than a durable queue — this app has no job scheduler/worker
+// infrastructure (the same documented gap behind the -3d/-2h reminder jobs elsewhere), so a
+// subscriber that's down for longer than a couple of seconds needs the manual replay instead.
+const webhookDeliveries = pgTable('webhook_deliveries', {
+  _id: uuid('_id').primaryKey().defaultRandom(),
+  eventId: uuid('event_id').notNull(),
+  eventType: text('event_type').notNull(),
+  subscription: uuid('subscription_id')
+    .notNull()
+    .references(() => webhookSubscriptions._id, { onDelete: 'cascade' }),
+  payload: jsonb('payload').notNull(),
+  // status: delivered | failed
+  status: text('status').notNull(),
+  attempts: integer('attempts').notNull().default(1),
+  responseStatus: integer('response_status'),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 module.exports = {
   users,
   customers,
@@ -838,4 +902,7 @@ module.exports = {
   knowledgeArticles,
   healthScoreWeights,
   auditLogs,
+  apiKeys,
+  webhookSubscriptions,
+  webhookDeliveries,
 };

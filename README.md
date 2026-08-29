@@ -144,6 +144,8 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Documents | `GET /documents/wash-receipt/:orderId`, `GET /documents/membership-agreement/:subscriptionId`, `GET /documents/wash-package-comparison` (any authenticated role) |
 | Analytics | `GET /analytics/health-score` (admin/manager), `PATCH /analytics/health-score/weights` (admin only), `GET /analytics/reports/{revenue-by-bay-daily,membership-mix-weekly,package-tier-margin,aov-by-vehicle-type,technician-throughput,ar-aging}` (admin/manager) |
 | Audit log | `GET /audit-log` (admin/manager) — filter with `?entity=`, one of `wash_order`\|`membership_subscription`\|`journal_entry`\|`employee` |
+| Platform (admin) | `GET/POST /platform/api-keys`, `PATCH /platform/api-keys/:id/revoke`, `GET/POST /platform/webhook-subscriptions`, `DELETE /platform/webhook-subscriptions/:id`, `GET /platform/webhook-deliveries`, `POST /platform/webhook-deliveries/:id/replay` |
+| Partner API `/v1` | `GET/POST /v1/wash-orders`, `GET/POST /v1/customers`, `GET /v1/membership-subscriptions`, `GET /v1/stock` — API-key auth (`X-API-Key` header), not the staff JWT |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -152,7 +154,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
 | HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision`, `GET/POST /hr/payroll-runs`, `GET /hr/payroll-runs/:id` (admin/manager) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth, knowledge base, analytics, audit log)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth, knowledge base, analytics, audit log, platform API)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
@@ -180,7 +182,9 @@ by a genuine fleet-invoice collection workflow that didn't exist before this pha
 (`carwash-compile/02-intelligence/analytics.md`), a real append-only audit log covering
 WashOrder/MembershipSubscription/JournalEntry/Employee with genuine human- and
 agent-attributed actors, and a real fleet-account-manager ABAC scoping rule added on top of
-this app's existing admin/manager/staff roles (`carwash-compile/01-foundation/security.md`), a
+this app's existing admin/manager/staff roles (`carwash-compile/01-foundation/security.md`),
+a real partner-facing `/v1` API with API-key auth and genuine HMAC-signed outbound webhooks
+(`carwash-compile/06-platform/api-webhooks.md`), a
 real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that
 auto-posts from checkout, membership billing, expenses, payroll, and purchasing, a real
 staff roster with scheduling, leave, and a payroll run that posts to that same ledger
@@ -697,6 +701,48 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
   - **Not built**: the same read/update-and-scope treatment for the `bay-attendant`/
     `wash-technician`/`detail-technician` positions' "their assigned ServiceBay only" rule —
     a real gap, left for a future pass rather than expanding this phase further.
+- **Platform API & Webhooks** (`carwash-compile/06-platform/api-webhooks.md`) — "a light but
+  real API surface... the fleet segment and a future companion mobile app both need something
+  to integrate against." A genuinely separate integration surface from everything else in
+  this app: API-key auth instead of the staff JWT, its own `/v1`-versioned routes, and real
+  outbound webhooks — not a fabricated mock, an actual HMAC-signed HTTP POST verified in this
+  session against an independent local receiver.
+  - **Partner API** (`/api/v1`, `server/src/controllers/v1Controller.js`) — the spec's exact
+    exposed-entity table: `WashOrder` (read, create), `Customer` (read, create),
+    `MembershipSubscription` (read), `Stock` (read, over this app's real `supplies` table).
+    Deliberately not exposed: `Employee`, `JournalEntry`, `Payment` detail, per the spec's own
+    "deliberately not exposed" list.
+  - **Two scopes, "each constrained exactly like the human role it mirrors, including the
+    same ABAC policies"** — `orders-readwrite` gets full read/write; `fleet-account-readonly`
+    reuses this app's real fleet-account-manager ABAC (the same scoping built above), but
+    narrower: a partner key belongs to one specific fleet customer, not the whole fleet
+    segment the way a human fleet-account-manager sees it. A write attempt with a
+    `fleet-account-readonly` key 403s structurally, same pattern as the human ABAC scoping.
+  - **Real outbound webhooks** (`server/src/services/webhookService.js`) — all four named
+    events (`wash-order-ready`, `wash-order-completed`, `membership-cancelled`, `stock-low`),
+    fired from the real workflow transitions that already exist (QC pass, checkout, every
+    membership-cancellation path including `wash-concierge`'s own `manage_membership` tool,
+    and `inventory-forecaster`'s real reorder-point calculation), not synthetic test events.
+    Every payload is HMAC-signed per-subscriber and retried up to 3 times with backoff on
+    failure. **Verified with a real independent local HTTP receiver in this session** — not
+    just checked for a 200 response, but for a valid HMAC signature matching what a genuine
+    third-party subscriber would compute, and for the retry/backoff path actually happening
+    against a deliberately unreachable URL.
+  - **Replayable by event ID** — `webhookDeliveries` logs every attempt (delivered or
+    failed) keyed by a stable `eventId` shared across retries of the same firing; a stored
+    delivery can be manually replayed later from `/platform`'s Delivery Log, since this app
+    has no durable retry queue beyond the immediate few attempts.
+  - **Rate limiting** — 300 requests/min per key, per the spec, enforced with an in-memory
+    per-key counter. Documented limitation: not distributed (this app runs a single server
+    process), so it resets on a restart and wouldn't hold up unmodified across multiple
+    instances.
+  - `/platform` (admin only) — issue/revoke API keys (the plaintext key is shown exactly
+    once, at creation, same handling as any real API-key system), register/remove webhook
+    subscriptions (same one-time reveal for the signing secret), and browse/replay the
+    delivery log.
+  - **Not built**: the self-serve developer portal and auto-generated API reference docs —
+    the spec's own text says neither is warranted at this scale ("manually issued keys are
+    enough... at 1-2 known integration partners").
 - **Not built yet**: the spec's full 7-role primary-login migration (Owner/Site Manager/Bay
   Attendant/Wash Technician/Detail Technician/Cashier/Fleet Account Manager as the actual
   session role, replacing admin/manager/staff) — a much larger, higher-regression-risk change

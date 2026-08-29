@@ -54,7 +54,7 @@ const run = async () => {
   console.log('Seeding database...');
 
   await pool.query(
-    'TRUNCATE audit_logs, health_score_weights, knowledge_articles, reviews, fleet_inquiries, agent_metrics, strategy_recommendations, stock_adjustments, purchase_order_lines, purchase_orders, package_supply_usage, supplies, suppliers, payroll_lines, payroll_runs, leave_requests, shifts, employees, journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
+    'TRUNCATE webhook_deliveries, webhook_subscriptions, api_keys, audit_logs, health_score_weights, knowledge_articles, reviews, fleet_inquiries, agent_metrics, strategy_recommendations, stock_adjustments, purchase_order_lines, purchase_orders, package_supply_usage, supplies, suppliers, payroll_lines, payroll_runs, leave_requests, shifts, employees, journal_lines, journal_entries, ledger_accounts, ticket_comments, tickets, agent_conversations, membership_subscriptions, membership_plans, customer_messages, wash_orders, package_pricing, wash_packages, service_bays, booking_services, bookings, expenses, vehicles, services, customers, users RESTART IDENTITY CASCADE'
   );
 
   // --- Chart of accounts (05-finance/accounting.md) — seeded once, up front, since every

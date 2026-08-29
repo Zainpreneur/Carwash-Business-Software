@@ -44,6 +44,7 @@ const membershipService = require('../services/membershipService');
 const { getStripe, isStripeConfigured } = require('../config/stripe');
 const { recordAgentEvent } = require('../utils/agentMetrics');
 const { logAudit } = require('../utils/auditLog');
+const { fireWebhookEvent } = require('../services/webhookService');
 
 // escalate_to_human's reason -> Ticket.category (04-growth/crm.md's category list). "other"
 // and "negative-sentiment"/"low-confidence" don't map to a specific SLA-bearing category, so
@@ -241,6 +242,7 @@ const executeTool = async (name, input, ctx) => {
       }
       const [cancelledSub] = await db.update(membershipSubscriptions).set({ status: 'cancelled', updatedAt: new Date() }).where(eq(membershipSubscriptions._id, sub._id)).returning();
       logAudit({ entity: 'membership_subscription', entityId: sub._id, action: 'update', actorType: 'agent', actorId: 'wash-concierge', before: sub, after: cancelledSub });
+      fireWebhookEvent('membership-cancelled', { subscriptionId: sub._id, customerId: sub.customer, cancelledAt: new Date().toISOString() }).catch(() => {});
       return { ok: true, status: 'cancelled' };
     }
 
