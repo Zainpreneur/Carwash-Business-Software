@@ -146,6 +146,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Audit log | `GET /audit-log` (admin/manager) — filter with `?entity=`, one of `wash_order`\|`membership_subscription`\|`journal_entry`\|`employee` |
 | Platform (admin) | `GET/POST /platform/api-keys`, `PATCH /platform/api-keys/:id/revoke`, `GET/POST /platform/webhook-subscriptions`, `DELETE /platform/webhook-subscriptions/:id`, `GET /platform/webhook-deliveries`, `POST /platform/webhook-deliveries/:id/replay` |
 | Partner API `/v1` | `GET/POST /v1/wash-orders`, `GET/POST /v1/customers`, `GET /v1/membership-subscriptions`, `GET /v1/stock` — API-key auth (`X-API-Key` header), not the staff JWT |
+| Executive View | `GET /views/executive` (admin/manager), `POST /views/executive/send` (admin only) |
 | Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
 | Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
 | WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
@@ -154,7 +155,7 @@ All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/registe
 | Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
 | HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision`, `GET/POST /hr/payroll-runs`, `GET /hr/payroll-runs/:id` (admin/manager) |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth, knowledge base, analytics, audit log, platform API)
+## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth, knowledge base, analytics, audit log, platform API, executive view)
 
 `carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
 Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
@@ -184,7 +185,8 @@ WashOrder/MembershipSubscription/JournalEntry/Employee with genuine human- and
 agent-attributed actors, and a real fleet-account-manager ABAC scoping rule added on top of
 this app's existing admin/manager/staff roles (`carwash-compile/01-foundation/security.md`),
 a real partner-facing `/v1` API with API-key auth and genuine HMAC-signed outbound webhooks
-(`carwash-compile/06-platform/api-webhooks.md`), a
+(`carwash-compile/06-platform/api-webhooks.md`), and a real Executive/Owner View daily digest
+composed from data this app already computes (`carwash-compile/02-intelligence/views.md`), a
 real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that
 auto-posts from checkout, membership billing, expenses, payroll, and purchasing, a real
 staff roster with scheduling, leave, and a payroll run that posts to that same ledger
@@ -743,6 +745,32 @@ growth cluster (social/marketing) are still ahead — see "Not built yet" below.
   - **Not built**: the self-serve developer portal and auto-generated API reference docs —
     the spec's own text says neither is warranted at this scale ("manually issued keys are
     enough... at 1-2 known integration partners").
+- **Executive/Owner View** (`02-intelligence/views.md`, `server/src/services/viewsService.js`)
+  — the spec compiles eight named views; most of them are just a particular arrangement of
+  data this app already computes and already shows somewhere (mapped below), so this phase
+  builds the one view with no existing home: a real composed daily digest for the owner.
+  - Leads with the health score, then `cars-washed-per-day`, `membership-penetration-rate`,
+    `net-membership-growth`, then *only* open anomaly alerts — the spec's own stated order,
+    composed from `healthScoreService` and `reportingCubeService` rather than recomputed.
+    `openAnomalyAlerts` is honestly an empty array: the anomaly-detection rule table
+    (`02-intelligence/analytics.md`) isn't built, so there's nothing real to put there — a
+    fabricated alert would be worse than an honest empty list.
+  - Medium is `whatsapp-digest`, cadence daily; sent on demand (no scheduler to fire it every
+    morning by itself) from a "Send to owner" button on `/reports`, admin only. Degrades to a
+    logged in-app notification when WhatsApp isn't configured or an admin has no phone number
+    on file — same posture as every other WhatsApp send in this app.
+  - **Where the other seven named views actually live** (built across earlier phases, not
+    duplicated here just to match the spec's own page boundaries): Operations View → `/wash-
+    queue`'s bay board + order table, `/hr`'s shift list (`isLate` flag is the real
+    `shift-no-show-alert` signal), `/tickets`; Financial View → `/finance` + `/reports`' P&L/
+    AR-Aging/package-tier-margin; Customer/CRM View → `/growth`'s segments + `/customers`;
+    Team/HR View → `/hr` + `/reports`' technician-throughput; Field/Mobile View → `/floor`
+    ("My Queue," already documented as the Bay Attendant view since Phase 2); Technical/
+    Architecture View → this README plus `server/src/db/schema.js`'s own comments, which are
+    the real, current ER relationships (not a static diagram that would drift from the code).
+    Growth/Marketing View is the one exception with no real home: it needs `funnel stage
+    volumes`, ad-campaign ROI, and `true-blended-cac` (`02-intelligence/data-aggregation.md`)
+    that depend on paid-ad-platform/analytics integrations this app doesn't have.
 - **Not built yet**: the spec's full 7-role primary-login migration (Owner/Site Manager/Bay
   Attendant/Wash Technician/Detail Technician/Cashier/Fleet Account Manager as the actual
   session role, replacing admin/manager/staff) — a much larger, higher-regression-risk change

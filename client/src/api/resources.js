@@ -194,6 +194,11 @@ export const platformApi = {
   },
 }
 
+export const viewsApi = {
+  executiveDigest: () => apiClient.get('/views/executive').then((r) => r.data),
+  sendExecutiveDigest: () => apiClient.post('/views/executive/send').then((r) => r.data),
+}
+
 export const auditLogApi = {
   list: (params) => apiClient.get('/audit-log', { params }).then((r) => r.data),
 }

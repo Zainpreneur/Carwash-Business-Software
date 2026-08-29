@@ -5,13 +5,13 @@ import {
 } from 'recharts'
 import { format, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
-import { dashboardApi, analyticsApi, washOrdersApi } from '../api/resources'
+import { dashboardApi, analyticsApi, washOrdersApi, viewsApi } from '../api/resources'
 import { getErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import Spinner from '../components/ui/Spinner'
 import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/ui/Modal'
-import { BarChart3, Gauge, Settings2 } from 'lucide-react'
+import { BarChart3, Gauge, Settings2, Smartphone, Send } from 'lucide-react'
 
 const COLORS = { pending: '#f59e0b', confirmed: '#0284c7', 'in-progress': '#7c3aed', completed: '#16a34a', cancelled: '#e11d48' }
 const currency = (n) => `$${Number(n || 0).toFixed(2)}`
@@ -151,6 +151,74 @@ const HealthScore = () => {
           </form>
         )}
       </Modal>
+    </div>
+  )
+}
+
+// Executive/Owner View (02-intelligence/views.md) — "leads with the health score, then
+// cars-washed-per-day, membership-penetration-rate, net-membership-growth, then *only* open
+// anomaly alerts." Medium is whatsapp-digest, sent on demand (no scheduler) since this app
+// has no way to fire it every morning by itself.
+const ExecutiveDigest = () => {
+  const { user } = useAuth()
+  const [digest, setDigest] = useState(null)
+  const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    viewsApi.executiveDigest().then(setDigest).catch((err) => toast.error(getErrorMessage(err)))
+  }, [])
+
+  const send = async () => {
+    setSending(true)
+    try {
+      const result = await viewsApi.sendExecutiveDigest()
+      const configured = result.deliveries.some((d) => d.channel === 'whatsapp')
+      toast.success(configured ? 'Digest sent via WhatsApp' : 'Digest logged (WhatsApp not configured)')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  if (!digest) return null
+
+  return (
+    <div className="card p-4 sm:p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Smartphone size={16} className="text-brand-500" />
+          <h3 className="text-sm font-semibold text-slate-800">Executive Digest</h3>
+        </div>
+        {user?.role === 'admin' && (
+          <button className="btn-secondary py-1 text-xs" onClick={send} disabled={sending}>
+            <Send size={13} /> {sending ? 'Sending…' : 'Send to owner'}
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-lg bg-slate-50 p-3 text-center">
+          <p className="text-lg font-semibold text-slate-900">{digest.healthScore ?? '—'}</p>
+          <p className="text-xs text-slate-500">Health score</p>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-3 text-center">
+          <p className="text-lg font-semibold text-slate-900">{digest.carsWashedToday}</p>
+          <p className="text-xs text-slate-500">Cars washed today</p>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-3 text-center">
+          <p className="text-lg font-semibold text-slate-900">{digest.membershipPenetrationRate === null ? '—' : `${(digest.membershipPenetrationRate * 100).toFixed(1)}%`}</p>
+          <p className="text-xs text-slate-500">Membership penetration</p>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-3 text-center">
+          <p className="text-lg font-semibold text-slate-900">{digest.netMembershipGrowth === null ? '—' : digest.netMembershipGrowth}</p>
+          <p className="text-xs text-slate-500">Net membership growth</p>
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-slate-400">
+        {digest.openAnomalyAlerts.length === 0
+          ? 'No open anomaly alerts (anomaly detection isn\'t built — see README).'
+          : `${digest.openAnomalyAlerts.length} open anomaly alert(s).`}
+      </p>
     </div>
   )
 }
@@ -360,6 +428,7 @@ const Reports = () => {
   return (
     <div className="space-y-5">
       <HealthScore />
+      <ExecutiveDigest />
 
       <div className="flex flex-wrap items-center gap-2">
         {ranges.map((r) => (

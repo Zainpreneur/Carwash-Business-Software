@@ -32,6 +32,7 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const auditLogRoutes = require('./routes/auditLogRoutes');
 const platformRoutes = require('./routes/platformRoutes');
 const v1Routes = require('./routes/v1Routes');
+const viewsRoutes = require('./routes/viewsRoutes');
 const { handleStripeWebhook } = require('./controllers/stripeWebhookController');
 const { verifyWebhook, receiveMessage } = require('./controllers/whatsappWebhookController');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
@@ -94,6 +95,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/audit-log', auditLogRoutes);
 app.use('/api/platform', platformRoutes);
 app.use('/api/v1', v1Routes);
+app.use('/api/views', viewsRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
