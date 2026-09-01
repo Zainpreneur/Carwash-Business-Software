@@ -1,0 +1,22 @@
+name = "carwash-api"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+
+[env.production]
+name = "carwash-api-prod"
+vars = { ENVIRONMENT = "production" }
+
+[env.staging]
+name = "carwash-api-staging"
+vars = { ENVIRONMENT = "staging" }
+
+[[d1_databases]]
+binding = "DB"
+database_name = "carwash-db"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "carwash-cache"
+
+[build]
+command = "npm install"
