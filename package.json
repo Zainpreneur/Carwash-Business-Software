@@ -1,0 +1,13 @@
+{
+  "name": "carwash-business-software",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Single-command run/setup for the Car Wash Business app",
+  "scripts": {
+    "setup": "node scripts/setup.cjs",
+    "build": "npm --prefix client run build",
+    "serve": "npm --prefix server run serve",
+    "start": "npm run setup && npm run build && npm run serve",
+    "dev": "node scripts/dev.cjs"
+  }
+}

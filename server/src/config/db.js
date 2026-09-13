@@ -1,17 +1,17 @@
 require('dotenv').config();
-const { Pool } = require('pg');
-const { drizzle } = require('drizzle-orm/node-postgres');
+const { createClient } = require('@libsql/client');
+const { drizzle } = require('drizzle-orm/libsql');
+const schema = require('../db/schema');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://localhost:5432/carwash',
+const client = createClient({
+  url: process.env.LIBSQL_URL || 'file:local.db',
+  offline: true,
 });
 
-const db = drizzle(pool);
+const db = drizzle(client, { schema });
 
 const connectDB = async () => {
-  const client = await pool.connect();
-  await client.query('SELECT 1');
-  client.release();
+  await client.execute('SELECT 1');
 };
 
-module.exports = { pool, db, connectDB };
+module.exports = { client, db, connectDB };

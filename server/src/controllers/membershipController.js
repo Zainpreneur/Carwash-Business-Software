@@ -158,10 +158,9 @@ const getSubscriptions = asyncHandler(async (req, res) => {
 });
 
 // enroll-membership workflow (01-foundation/data-model.md): cashier captures vehicle plate
-// + payment token -> creates MembershipSubscription (Active) -> welcome message. Shared with
-// wash-concierge's start_membership_signup tool via services/membershipService.js, so a
-// chat-driven signup goes through the exact same Stripe/demo-mode path a cashier-driven one
-// does — see that module for the Stripe Checkout Session vs. local-demo-record logic.
+// + payment token -> creates MembershipSubscription (Active) -> welcome message. Deferred to
+// services/membershipService.js so every signup path shares the same Stripe-vs-demo-mode
+// logic — see that module for the Stripe Checkout Session vs. local-demo-record decision.
 const createSubscription = asyncHandler(async (req, res) => {
   const { customer: customerId, vehicle: vehicleId, plan: planId, successUrl, cancelUrl } = req.body;
   try {

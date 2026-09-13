@@ -1,521 +1,187 @@
 # SudsFlow — Car Wash Business Management App
 
-A full-stack, fully responsive web application for managing a car wash business: bookings, customers, vehicles, service catalog, staff, expenses, and revenue reporting.
+A full-stack, fully responsive web application for managing a car wash business: bookings, customers, vehicles, service catalog, wash-floor operations, memberships, support tickets, staff scheduling, inventory & purchasing, expenses, and revenue reporting. **One command runs the whole thing on one port.**
 
 Built with:
 
-- **Backend:** Node.js, Express, PostgreSQL (Drizzle ORM), JWT authentication
+- **Backend:** Node.js, Express, SQLite (libSQL / Drizzle ORM), JWT authentication
 - **Frontend:** React 19 (Vite), React Router, Tailwind CSS v4, Recharts, Axios
+- **Database:** a single local file (`server/local.db`) — no external database server to install or run. Optional real Stripe/WhatsApp credentials enable live integrations; without them everything runs in demo/fallback mode.
+
+## Quick start
+
+### One command (recommended)
+
+```bash
+npm.cmd run start
+```
+
+That `setup` → `build` → `serve` chain (see `package.json`) will:
+
+1. Install `server/` and `client/` dependencies (only if missing),
+2. Create `server/.env` from `.env.example` the first time,
+3. Create `server/local.db`, push the schema, and seed demo data (only if the file doesn't already exist),
+4. Build the React app into `server/static/`,
+5. Start **one** Express server on **one port**: http://localhost:5000
+
+The API (`/api/...`) and the UI are served by that single process — the built SPA also uses `index.html` as the fallback for client-side routes (any non-`/api` path).
+
+On Windows you can also just double-click `start-cw.cmd`.
+
+### Manual steps
+
+```bash
+npm.cmd run setup     # deps + .env + database (schema + seed) if needed
+npm.cmd run build     # client -> server/static (Vite)
+npm.cmd run serve     # starts the Express server on :5000
+```
+
+Seeded demo accounts:
+
+| Role    | Email                | Password   |
+|---------|----------------------|------------|
+| Admin   | admin@carwash.com     | admin123   |
+| Manager | manager@carwash.com   | manager123 |
+| Staff   | john@carwash.com      | staff123   |
+
+New workspaces can also self-register at `/register` — the **first** registered account automatically becomes `admin`.
+
+### Development mode (hot reload)
+
+```bash
+npm.cmd run dev
+```
+
+Starts the Vite dev server (port 5173) and the API (port 5000) together; the Vite server proxies `/api/*` to the API automatically. Close the browser window to stop both, or set `NO_OPEN=1` to skip auto-opening.
+
+### Reset the database
+
+Delete `server/local.db` (or set `FORCE_SEED=1`) and re-run `npm.cmd run setup` / `npm.cmd run start` — the schema is pushed and demo data re-seeded.
 
 ## Features
 
-- 🔐 JWT auth with role-based access (`admin`, `manager`, `staff`)
-- 📊 Dashboard with live revenue charts, service breakdown, and upcoming bookings
+- 🔐 JWT auth with role-based access (`admin`, `manager`, `staff`); the UI's role gates are mirrored server-side
+- 📊 Dashboard — live revenue chart, service breakdown, booking status breakdown, upcoming bookings, insights
 - 📅 Booking management — create, edit, reschedule, assign staff, track status & payment
-- 👥 Customer directory with vehicle history, loyalty points, and visit tracking
-- 🚗 Vehicle records linked to customers
-- 🧴 Service catalog (wash packages, detailing, add-ons) with pricing & duration
-- 🧑‍💼 Staff/team management (admin only)
-- 💵 Expense tracking by category
+- 🚿 Wash-floor operations — wash packages (with per-vehicle-type pricing), service bays, and the full `WashOrder` lifecycle: queue → bay assignment → wash → quality check → checkout, with a live bay board (`/wash-queue`) and per-role floor views (`/floor` "My Queue", `/checkout`)
+- 👥 Customer directory — vehicle history, loyalty points, visit tracking, 360° profile
+- 💳 Memberships — plans CRUD and subscriptions with pause/resume/cancel; real billing via Stripe when configured (see Integrations)
+- 🧾 Support tickets — damage claims, billing disputes, quality complaints, with SLA-status indicators and a staff comment thread
+- 🧑‍💼 HR — employee roster (distinct from login roles), shift scheduling with clock-in/out and late flags, leave requests
+- 📦 Inventory & purchasing — supplies with per-package consumption tracking, stock adjustments, purchase orders (`Draft → Sent → PartiallyReceived → Received → Closed`)
+- 💵 Expenses — categorized expense tracking
 - 📈 Reports — revenue trends, booking status breakdown, top services
+- 🔔 Notifications — in-app alerts for admin/manager (queue backups, bay downs, membership payment failures, ...)
 - 📱 Fully responsive UI — mobile drawer navigation, adaptive tables/cards, touch-friendly forms
 
 ## Project structure
 
 ```
-Carwash-Claude/
-├── carwash-compile/ Compiled SplashPoint business-OS spec (see below)
-├── server/          Express API (REST, JWT auth, PostgreSQL via Drizzle ORM)
+Carwash-Business-Software/
+├── carwash-compile/    Compiled SplashPoint business-OS spec (reference only)
+├── server/             Express API (REST, JWT auth, SQLite via Drizzle ORM)
+│   ├── static/         Built React app — served by Express when present
+│   ├── local.db        SQLite database file (created on first setup/start)
 │   └── src/
-│       ├── db/            Drizzle table schema + Postgres pool/client
-│       ├── controllers/    Route handlers / business logic
-│       ├── routes/         Express routers
-│       ├── middleware/     Auth guard, error handler
-│       └── utils/          Token helper, notify helper, database seed script
-├── client/          React (Vite) SPA
+│       ├── db/         Drizzle table schema + libSQL client
+│       ├── controllers/  Route handlers / business logic
+│       ├── routes/     Express routers
+│       ├── services/   Shared logic (e.g. membership, inventory)
+│       ├── utils/      Automations, WhatsApp, notifications, seed script
+│       └── middleware/ Auth guard, error handler
+├── client/             React (Vite) SPA — builds into server/static
 │   └── src/
-│       ├── pages/         Route-level screens
-│       ├── components/    Layout, shared & feature UI components
-│       ├── context/       Auth context/provider
-│       └── api/           Axios client + resource API modules
-└── docker-compose.yml
+│       ├── pages/      Route-level screens
+│       ├── components/ Layout, shared & feature UI components
+│       ├── context/    Auth context/provider
+│       └── api/        Axios client + resource API modules
+├── scripts/            setup.cjs / dev.cjs (one-command tooling)
+├── start-cw.cmd        Windows double-click launcher
+└── package.json        Root scripts: setup / build / serve / start / dev
 ```
 
-## Getting started (local dev)
-
-### Prerequisites
-
-- Node.js 18+
-- A running PostgreSQL instance (local `postgres`, Docker, or a hosted Postgres like Supabase/Neon/RDS)
-
-### 1. Backend
-
-```bash
-cd server
-cp .env.example .env     # edit DATABASE_URL / JWT_SECRET as needed
-npm install
-npm run db:push            # syncs the Drizzle schema to your database
-npm run seed              # populates demo data + accounts (optional but recommended)
-npm run dev                # starts on http://localhost:5000
-```
-
-Seeded demo accounts (`npm run seed`):
-
-| Role    | Email                | Password   |
-|---------|-----------------------|------------|
-| Admin   | admin@carwash.com     | admin123   |
-| Manager | manager@carwash.com   | manager123 |
-| Staff   | john@carwash.com      | staff123   |
-
-### 2. Frontend
-
-```bash
-cd client
-cp .env.example .env      # VITE_API_URL, defaults to /api via dev proxy
-npm install
-npm run dev                # starts on http://localhost:5173
-```
-
-The Vite dev server proxies `/api/*` to `http://localhost:5000` automatically (see `vite.config.js`).
-
-Sign in at `http://localhost:5173/login`, or click a "Quick demo login" button to autofill demo credentials. New workspaces can also self-register — the **first** registered account automatically becomes `admin`.
-
-### 3. Run everything with Docker Compose
-
-```bash
-docker compose up --build
-```
-
-This starts PostgreSQL, the API (port 5000 — pushing its schema and applying it on every
-boot), and the client served via Nginx (port 8080). Run `docker compose exec server npm run
-seed` once the stack is up if you want demo data.
+> Dockerfile(s) for `server/` and `client/` and the old `docker-compose.yml` predate the single-process + SQLite move and are **obsolete** — they reference PostgreSQL and a separate client container. Remove them if you don't use Docker; see "What is not in this app" below.
 
 ## Environment variables
 
-**server/.env**
+**server/.env** (created automatically from `.env.example` on first run):
 
-| Variable          | Description                          |
-|-------------------|---------------------------------------|
-| `PORT`            | API port (default 5000)               |
-| `DATABASE_URL`    | PostgreSQL connection string          |
-| `JWT_SECRET`      | Secret used to sign JWTs              |
-| `JWT_EXPIRES_IN`  | Token lifetime (e.g. `7d`)            |
-| `CLIENT_URL`      | Allowed CORS origin                   |
-| `STRIPE_SECRET_KEY` | Optional — enables real membership billing via Stripe Checkout/subscriptions. Omit to run membership signup as a local demo (see below). |
-| `STRIPE_WEBHOOK_SECRET` | Optional — required for `/api/webhooks/stripe` to process events (payment success/failure); the endpoint 501s without it even if `STRIPE_SECRET_KEY` is set. |
-| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` | Optional — enables real WhatsApp Cloud API sends. Omit to log automation decisions to `customer_messages` with `status: not_configured` instead of sending. |
-| `ANTHROPIC_API_KEY` | Optional — enables `queue-dispatch-agent`'s real overflow judgment call and `wash-concierge`'s real chat replies. Unlike Stripe/WhatsApp there's no free test mode; costs real tokens once set. Omit for fixed fallback messages. |
-| `WHATSAPP_VERIFY_TOKEN` | Optional — required for Meta to register the `/api/webhooks/whatsapp` webhook URL (any string you choose). |
-| `WHATSAPP_APP_SECRET` | Optional but recommended — enables `X-Hub-Signature-256` verification on inbound webhook calls. |
+| Variable | Description |
+|----------|-------------|
+| `PORT` | API port (default `5000`) |
+| `LIBSQL_URL` | SQLite database location (default `file:local.db`, i.e. `server/local.db`) |
+| `JWT_SECRET` | Secret used to sign JWTs (change it) |
+| `JWT_EXPIRES_IN` | Token lifetime (e.g. `7d`) |
+| `CLIENT_URL` | Allowed CORS origin (dev only — same-origin in prod) |
+| `STRIPE_SECRET_KEY` | Optional — enables real membership billing via Stripe Checkout/subscriptions. Omit to run membership signup as a local demo. |
+| `STRIPE_WEBHOOK_SECRET` | Optional — required for `/api/webhooks/stripe` to process events (payment success/failure); without it the endpoint responds 501 even if `STRIPE_SECRET_KEY` is set. |
+| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` | Optional — enables real WhatsApp Cloud API sends (automations + membership dunning/welcome). Omit to log every send attempt to `customer_messages` with `status: not_configured`. |
 | `WHATSAPP_API_VERSION` | Optional, defaults to `v21.0`. |
-| `SALES_TAX_RATE` | Optional, defaults to `0.05` — the tax-inclusive rate backed out of `WashOrder.price` when posting to the accounting ledger. Set to the actual local car-wash-service tax rate for a real deployment. |
 
-**client/.env**
+**client/.env** (optional — none required):
 
-| Variable        | Description                                   |
-|-----------------|------------------------------------------------|
-| `VITE_API_URL`  | Base URL for API calls (default `/api`)        |
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_URL` | Base URL for API calls (default `/api`, same-origin) |
 
 ## API overview
 
-All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/register`, `/health`) require an `Authorization: Bearer <token>` header.
+All endpoints are prefixed with `/api` and (except `/auth/login`, `/auth/register`, `/health`, and the Stripe webhook) require an `Authorization: Bearer <token>` header. Put `(admin/manager)` next to routes restricted by role.
 
-| Resource     | Endpoints |
-|--------------|-----------|
-| Auth         | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
-| Users        | `GET/POST /users`, `GET/PUT/DELETE /users/:id` |
-| Customers    | `GET/POST /customers`, `GET/PUT/DELETE /customers/:id` |
-| Vehicles     | `GET/POST /vehicles`, `GET/PUT/DELETE /vehicles/:id` |
-| Services     | `GET/POST /services`, `GET/PUT/DELETE /services/:id` |
-| Bookings     | `GET/POST /bookings`, `GET/PUT/DELETE /bookings/:id`, `PATCH /bookings/:id/status`, `PATCH /bookings/:id/payment` |
-| Expenses     | `GET/POST /expenses`, `PUT/DELETE /expenses/:id` |
-| Dashboard    | `GET /dashboard/summary`, `/revenue-chart`, `/service-breakdown`, `/status-breakdown`, `/upcoming-bookings` |
+| Resource | Endpoints |
+|----------|-----------|
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
+| Users | `GET/POST /users`, `GET/PUT/DELETE /users/:id` (mutations admin-only) |
+| Customers | `GET/POST /customers`, `GET/PUT/DELETE /customers/:id` |
+| Vehicles | `GET/POST /vehicles`, `GET/PUT/DELETE /vehicles/:id`, `GET /vehicles/plate/:plate` |
+| Services | `GET/POST /services`, `GET/PUT/DELETE /services/:id` (mutations admin/manager) |
+| Bookings | `GET/POST /bookings`, `GET/PUT/DELETE /bookings/:id`, `PATCH /bookings/:id/status`, `PATCH /bookings/:id/payment` |
+| Expenses | `GET/POST /expenses`, `PUT/DELETE /expenses/:id` |
+| Dashboard | `GET /dashboard/summary`, `/revenue-chart`, `/service-breakdown`, `/status-breakdown`, `/upcoming-bookings`, `/insights` |
 | Notifications | `GET /notifications`, `/notifications/unread-count`, `PATCH /notifications/:id/read`, `/notifications/read-all` |
-| Wash packages | `GET/POST /wash-packages`, `GET/PUT/DELETE /wash-packages/:id` (each carries 3-tier pricing) |
-| Service bays | `GET /service-bays`, `POST /service-bays`, `PUT/DELETE /service-bays/:id` |
-| Wash orders  | `GET/POST /wash-orders`, `GET /wash-orders/checkout-stats`, `GET /wash-orders/customer-messages`, `GET/DELETE /wash-orders/:id`, `PATCH /wash-orders/:id/{assign-bay,start-wash,complete-wash,qc,checkout,cancel}` |
-| Membership plans | `GET/POST /membership-plans`, `GET/PUT/DELETE /membership-plans/:id` |
+| Wash packages | `GET/POST /wash-packages`, `GET/PUT/DELETE /wash-packages/:id` (each carries 3-tier per-vehicle pricing) |
+| Service bays | `GET/POST /service-bays`, `PUT/DELETE /service-bays/:id` |
+| Wash orders | `GET/POST /wash-orders`, `GET /wash-orders/checkout-stats`, `GET /wash-orders/customer-messages` (admin/manager), `GET/DELETE /wash-orders/:id`, `PATCH /wash-orders/:id/{assign-bay,start-wash,complete-wash,qc,checkout,cancel}` |
+| Membership plans | `GET/POST /membership-plans`, `GET/PUT/DELETE /membership-plans/:id` (mutations admin/manager) |
 | Membership subscriptions | `GET/POST /membership-subscriptions`, `PATCH /membership-subscriptions/:id/{pause,resume,mark-paid,cancel}` |
-| Inventory | `GET/POST /inventory/supplies`, `PUT/DELETE /inventory/supplies/:id`, `GET/POST /inventory/adjustments`, `GET/POST /inventory/purchase-orders`, `GET /inventory/purchase-orders/:id`, `PATCH /inventory/purchase-orders/:id/{approve,receive,close}`, `GET /inventory/forecast`, `POST /inventory/forecast/run` (admin/manager) |
-| Simulations | `GET /simulations/{bay-throughput,demand-forecast,staffing-capacity,membership-economics,cash-flow-forecast}`, `POST /simulations/pricing-scenario` (admin/manager) |
-| Agent ops | `GET /agent-ops/orchestrator-snapshot`, `POST /agent-ops/strategy-advisor/ask`, `GET /agent-ops/strategy-advisor/history`, `GET /agent-ops/system-health-report` (admin/manager) |
-| Growth | `GET /growth/segments/{summary,customers}`, `GET/POST /growth/fleet-inquiries`, `PATCH /growth/fleet-inquiries/:id/status`, `GET/POST /growth/reviews` (admin/manager) |
-| Integrations | `GET /integrations/status` — whether Stripe/WhatsApp/AI agents are configured |
-| Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
-| WhatsApp webhook | `GET /api/webhooks/whatsapp` (Meta's verification handshake), `POST /api/webhooks/whatsapp` (unauthenticated — an optional `X-Hub-Signature-256` check is the auth) |
-| Concierge | `GET /concierge/conversations`, `POST /concierge/simulate` (admin/manager — exercises `wash-concierge` without a real WhatsApp number) |
 | Tickets | `GET/POST /tickets`, `GET /tickets/:id`, `PATCH /tickets/:id/{status,assign}`, `POST /tickets/:id/comments` |
-| Ledger | `GET /ledger/accounts`, `GET /ledger/entries`, `GET /ledger/pnl` (admin/manager) |
-| HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision`, `GET/POST /hr/payroll-runs`, `GET /hr/payroll-runs/:id` (admin/manager) |
+| HR | `GET/POST /hr/employees`, `GET/PUT/DELETE /hr/employees/:id`, `GET/POST /hr/shifts`, `PUT/DELETE /hr/shifts/:id`, `PATCH /hr/shifts/:id/{clock-in,clock-out}`, `GET/POST /hr/leave-requests`, `PATCH /hr/leave-requests/:id/decision` (admin/manager) |
+| Inventory | `GET/POST /inventory/supplies`, `PUT/DELETE /inventory/supplies/:id`, `GET/POST /inventory/adjustments`, `GET/POST /inventory/purchase-orders`, `GET /inventory/purchase-orders/:id`, `PATCH /inventory/purchase-orders/:id/{approve,receive,close}` (admin/manager) |
+| Integrations | `GET /integrations/status` — whether Stripe/WhatsApp are configured (shown on `/memberships`) |
+| Stripe webhook | `POST /api/webhooks/stripe` (unauthenticated — Stripe's own HMAC signature is the auth, not a bearer token) |
+| Health | `GET /api/health` |
 
-## SplashPoint Wash Queue (spec Phases 1, 2, 4, 5, most of 6, CRM/support, finance, HR, inventory, simulation, agent ops, growth)
+## Integrations (optional, demo-mode by default)
 
-`carwash-compile/` is a compiled business-OS spec for a fictional 6-bay wash, "SplashPoint
-Express Wash" (see `carwash-compile/00-index.md`). Its own deployment guide lays out an
-8-step build order; **all 8 steps have something real and live**, though step 6 (the AI
-agent roster) is still missing the three agents that genuinely need IoT telemetry or a
-telephony API — (1) the data model +
-primary wash lifecycle, (2) role-based UI, (3) RBAC (folded into the Phase 2 work), (4) the
-lifecycle's automations, (5) the two integrations the primary lifecycle needs (Stripe,
-WhatsApp Cloud API), (6) nine of the 12-agent roster — `queue-dispatch-agent`'s overflow
-judgment call, `wash-concierge` (the customer-facing WhatsApp chat agent),
-`membership-billing-agent` (the past-due/suspended/cancelled lifecycle),
-`inventory-forecaster` (reorder recommendations), `ops-orchestrator` (the day's operating
-picture), `strategy-advisor` plus `system-health-agent` (open-ended owner Q&A and a
-weekly agent-health report), and `fleet-lead-scorer` plus `review-response-agent` (the
-growth cluster's two task agents) — five of the nine make **no Claude call at all**, see
-below — (7) a real support-ticket system with SLAs
-that gives `wash-concierge`'s escalations somewhere to be tracked to resolution, real
-customer segmentation and a referral program (`carwash-compile/04-growth/marketing.md`), a
-real double-entry accounting ledger (`carwash-compile/05-finance/accounting.md`) that
-auto-posts from checkout, membership billing, expenses, payroll, and purchasing, a real
-staff roster with scheduling, leave, and a payroll run that posts to that same ledger
-(`carwash-compile/03-operations/hr.md`), and a real inventory/purchasing module
-(`carwash-compile/03-operations/inventory.md`) that closes the ledger's own previously-dead
-`1400`/`2000`/`5700` accounts, and (8) five of `02-intelligence/simulation.md`'s seven
-forecasting models (`carwash-compile/02-intelligence/simulation.md`) — bay-throughput,
-demand, staffing-capacity, membership-economics, and cash-flow — computed live from real
-data with every stated assumption labeled, per the spec's own "ship it with clearly-labeled
-industry-benchmark defaults from day one" guidance for this exact step. All of Stripe,
-WhatsApp, and the AI agents are **credential-gated**: this session has none of the
-underlying real accounts, so each feature runs in a graceful fallback mode until real keys
-are added to `server/.env` — nothing crashes or silently
-pretends to work without them. The rest of step 6, the wash-sensor/IoT platform, and the
-growth cluster (social/marketing) are still ahead — see "Not built yet" below.
+The app runs fully without any real accounts — membership billing and WhatsApp messaging degrade to an explicit local demo instead of failing:
 
-- **Data model**: `WashPackage` (+ 3-tier `PackagePricing`), `ServiceBay`, `WashOrder` — see
-  `carwash-compile/01-foundation/data-model.md` for the source spec.
-- **Lifecycle**: queue-entry → auto bay assignment (matched to the package's
-  tunnel/detail-bay lane) → start wash → complete wash → quality check (pass → ready for
-  pickup, fail → looped back to rework) → checkout, plus cancel from Queued/BayAssigned.
-  State transitions are enforced server-side (`washOrderController.js`).
-- **Role-based views** (`carwash-compile/01-foundation/dashboards.md`), all in the sidebar:
-  - **My Queue** (`/floor`, all roles) — the Bay Attendant/Wash Technician home view: next 5
-    queued vehicles, next open bay, one-tap log-vehicle/assign-bay/start-wash/complete-wash/
-    QC pass-fail. Deliberately minimal, mobile-first.
-  - **Checkout** (`/checkout`, all roles) — the Cashier home view: the ready-for-pickup
-    queue plus today's revenue split (membership / pay-per-wash / fleet).
-  - **Wash Ops** (`/wash-queue`, admin/manager only) — the Site Manager view: the full
-    6-bay status board and order table, including completed/cancelled history.
-- **RBAC**: `GET /wash-orders` enforces server-side, not just in the UI — a `staff` request
-  can never pull completed/cancelled orders (a specific *non-terminal* status like
-  `ready-for-pickup` still narrows the result; `admin`/`manager` are unrestricted). Matches
-  the spec's Bay Attendant scoping: "'my queue today' only, not the full order history."
-- **Automations** (`carwash-compile/03-operations/automations.md`, `server/src/utils/automations.js`)
-  — the 3 of 11 spec'd automations scoped to the primary lifecycle (the rest need
-  entities/integrations not built yet):
-  - `notify-ready-for-pickup` — fires on QC pass, gated by `Customer.whatsappOptIn`; sends a
-    real WhatsApp template when configured (see Integrations below), always logged to a
-    `customer_messages` audit table (`GET /wash-orders/customer-messages`, admin/manager).
-  - `queue-wait-alert` — notifies admin/manager when queue length > 8 or predicted wait
-    > 20 min, deduped to at most one alert per 15-minute window.
-  - `bay-down-reroute` — when a bay's `operationalStatus` flips to `down`, any order already
-    `bay-assigned` there is rerouted to another open bay in the same lane, or requeued if
-    none is free; orders already mid-wash/QC on it are escalated to admin/manager instead of
-    silently moved, since a wash in progress can't be safely relocated.
-- **Integrations** (`carwash-compile/06-platform/integrations.md`) — Stripe (a direct
-  secret-key integration; the spec lists oauth2/Stripe Connect, which is for a platform
-  onboarding many merchant sub-accounts — this single-location business integrating its own
-  account is the correct simplification) and the WhatsApp Business Cloud API:
-  - **Membership billing** (`carwash-compile/01-foundation/data-model.md`'s `MembershipPlan`
-    + `MembershipSubscription`, the `enroll-membership` workflow) — a "New membership"
-    shortcut on the Checkout screen and a `/memberships` admin page (plan CRUD +
-    subscription pause/resume/cancel). With `STRIPE_SECRET_KEY` set, sign-up redirects to a
-    real hosted Stripe Checkout Session and `POST /api/webhooks/stripe` drives the
-    Active↔PastDue/Cancelled state machine from real `invoice.payment_failed`/
-    `invoice.payment_succeeded`/`customer.subscription.deleted` events (also firing
-    `membership-payment-failed-dunning`). Without it, sign-up creates the subscription
-    locally as `active` with no real charge — clearly labeled "demo mode" in the UI.
-  - **WhatsApp sends** (`server/src/utils/whatsapp.js`) — `notify-ready-for-pickup` and the
-    membership welcome/dunning messages attempt a real template send via the Cloud API when
-    `WHATSAPP_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` are set (still requires the named templates
-    to exist and be Meta-approved on that number); otherwise every attempt is logged to
-    `customer_messages` with `status: not_configured`.
-  - `GET /api/integrations/status` reports live connection state — shown as a banner on
-    `/memberships` — so nothing pretends to be connected when it isn't.
-- **AI agents** (`carwash-compile/02-intelligence/ai-agents.md`, `server/src/agents/`) —
-  the two highest-leverage agents per the deployment guide's own "AI agents, highest-leverage
-  first" ordering (`queue-dispatch-agent`, `wash-concierge`), plus `membership-billing-agent`
-  once the Ticket/HR/finance phases gave the roster's other entities somewhere to live.
-  - `queue-dispatch-agent`'s mechanical job (assign a queued vehicle to the next open bay)
-    was already deterministic code since Phase 1 — a well-suited task for a rule, not an
-    LLM. What's genuinely judgment-shaped is the spec's own overflow guardrail ("escalates to
-    site-manager if predicted wait exceeds 25 minutes... open self-serve overflow or call in
-    an extra bay-attendant"). With `ANTHROPIC_API_KEY` set, that specific escalation calls
-    Claude for a one- or two-sentence recommendation folded into the `queue-wait-alert`
-    notification (tagged `[queue-dispatch-agent]`); without it, the same fixed message this
-    app used before agents existed (tagged `[auto]`). The model is never given a tool that
-    can mutate `WashOrder`/`ServiceBay` state — guardrail enforced in code, not just the
-    prompt — its only output is advisory text a human reads.
-  - `wash-concierge` — "the highest-volume customer-facing surface" — is a real inbound
-    WhatsApp chat agent (`POST /api/webhooks/whatsapp`, verified via Meta's handshake and an
-    optional `X-Hub-Signature-256` check) with a Claude tool-use loop
-    (`server/src/agents/washConcierge.js`) covering the spec's conversational flows: wash
-    status lookup, membership sign-up (reuses the same Stripe/demo-mode path as the Checkout
-    shortcut — `server/src/services/membershipService.js`), pause/cancel, and FAQ. Per-phone
-    conversation memory (`agent_conversations`, 90 days) means a repeat question isn't
-    answered from scratch. Guardrails enforced in code, not just the prompt: every tool is
-    scoped to whichever `Customer` row's phone matches the sender — the model can never
-    substitute a different customer/vehicle id — and there is no tool that can change
-    pricing, process a cash refund, or set `qcResult`, so those guardrails are structural
-    (nothing to call), not just an instruction. A hard round cap forces an escalation instead
-    of an unbounded tool-call loop. No key configured -> every inbound message still gets a
-    reply and a staff notification (`wash_concierge_escalation`), just not an AI-generated
-    one. A `/concierge` admin page shows recent conversations and lets staff exercise the
-    agent (`POST /api/concierge/simulate`) without a real WhatsApp number.
-  - **Not built** from the spec's own text: detail-bay appointment booking/rescheduling via
-    chat — the spec itself says that should be WhatsApp Flows (a structured picker), a
-    separate platform feature, not a conversational capability — and a real
-    `knowledge_base.search` tool (no KB entity built yet); FAQ content is folded into the
-    system prompt instead.
-  - `membership-billing-agent` (`server/src/agents/membershipBillingAgent.js`) manages the
-    past-due → suspended → cancelled lifecycle on a failed membership charge — but makes
-    **no Claude call at all**. The spec's own description of this agent is pure threshold/
-    state-machine logic (3 failed attempts or 7 days unresolved → suspend, never cancel
-    before that; 30 days unresolved → cancel) with no natural-language judgment call
-    anywhere in it — the same automations-vs-agents distinction drawn everywhere else in
-    this app (e.g. `queue-dispatch-agent`'s actual bay assignment is deterministic code;
-    only its overflow *recommendation* calls Claude). Retrying the charge itself is Stripe's
-    own job (Smart Retries); this only reacts to the `invoice.payment_failed`/
-    `invoice.payment_succeeded` webhook events already wired in Phase 5, evaluating the
-    state machine on each one. A new `PATCH /membership-subscriptions/:id/mark-paid` lets
-    staff resolve a past-due/suspended member manually (cash at the counter) — the state
-    machine's own "active (paid manually)" exit. **Not built**: a customer-facing WhatsApp
-    notice on suspension/cancellation (the spec's own template table doesn't define one for
-    either event, only for a payment-failure retry — sending one would mean inventing
-    content the spec never specified).
-- **CRM & support** (`carwash-compile/04-growth/crm.md`, `server/src/controllers/ticketController.js`)
-  — a real `Ticket` entity (damage claims, billing disputes, quality complaints, membership
-  questions), state-machined `open → in-progress → waiting-on-customer/resolved → closed`
-  (server-enforced, `ticketController.js`'s `ALLOWED_TRANSITIONS`; reopening a resolved/closed
-  ticket back to `in-progress` is a practical addition beyond the spec's own table).
-  - **SLAs** (`server/src/utils/tickets.js`) — a first-response and resolution deadline per
-    category, from the spec's own SLA table, computed live on every read rather than pushed
-    proactively (this app has no job scheduler — see the reminder-jobs note below); "at risk"
-    means inside the last 25% of the deadline window, not yet breached. Calendar-time
-    deadlines, not the spec's business-hours-aware version — a documented simplification.
-  - **`wash-concierge` now has somewhere to send an escalation**: `escalate_to_human` creates
-    a real Ticket (category derived from the escalation reason — damage claim, refund
-    request, negative sentiment, or general) alongside the existing staff notification, so a
-    chat escalation is trackable to resolution instead of a fire-and-forget alert.
-  - **Customer 360** (`GET /api/customers/:id`, the customer profile modal) — membership
-    status and support-ticket history alongside existing wash/booking history, per the
-    spec's `customer360Includes`.
-  - `/tickets` ("Support" in the sidebar, open to all roles) — filterable list with SLA-risk
-    indicators, a detail view with status-transition actions, staff assignment, and a comment
-    thread.
-  - **Not built** from the spec's own text: the sales pipeline (the spec's own guidance is to
-    skip it — no real inbound-lead volume to justify it yet) and a unified omni-channel
-    thread linking WhatsApp/email/in-app messages onto one ticket (comments today are
-    staff-authored or system-generated only).
-- **Finance & accounting** (`carwash-compile/05-finance/accounting.md`, `server/src/services/ledgerService.js`)
-  — a real double-entry general ledger: the spec's own 21-account chart, seeded once at
-  deploy time, and immutable `JournalEntry`/`JournalLine` rows every one of which traces
-  back (`sourceEntity`/`sourceId`) to the `WashOrder`, `MembershipSubscription`, or expense
-  that generated it. `postEntry()` refuses to write an unbalanced entry — a bug in a posting
-  function fails loudly instead of quietly corrupting the books.
-  - **Auto-posting**, per the spec's own "no manual bookkeeping for routine transactions"
-    rule — wired into the three workflow steps this app actually has that move money:
-    `WashOrder` checkout (cash/card debits `1000 Cash`, `fleet-invoice` debits
-    `1100 Accounts Receivable - Fleet` instead — the spec's own account split; a
-    membership-paid visit posts nothing new, since that revenue was already recognized when
-    the subscription was charged), a successful membership charge (Stripe's
-    `invoice.payment_succeeded`, using the invoice's actual `amount_paid` — accurate through
-    proration — or the local demo-mode signup simulating one), and this app's pre-existing
-    `Expense` entity (not in the spec, but the natural expense side of the same ledger —
-    each category maps onto one of the spec's expense accounts). Sales tax is backed out of
-    `WashOrder.price` as a tax-inclusive total at a configurable `SALES_TAX_RATE` (default
-    5%, matching this app's existing legacy-booking rate) — the spec has no separate tax
-    field to read instead.
-  - **Never mutates a posted entry** — deleting an expense posts a reversing entry instead
-    (the spec's own period-close posture: "lock the period from further edits"). Editing an
-    already-posted expense's amount/category does *not* currently re-post a correction — a
-    documented simplification, not a silent one.
-  - `/finance` (admin/manager) — a date-ranged P&L (revenue/expense by account, net income),
-    the full chart of accounts with live balances, and a readable journal.
-  - **Not built**, per the spec's own text: payroll posting (needs `03-operations/hr.md`,
-    not built) and `PurchaseOrder` receiving (needs an inventory module, not built) — the
-    spec's other two auto-posting triggers; refunds (this app's cancel-wash-order flow only
-    allows cancelling *before* payment is ever collected, so there's no charge yet to
-    reverse); the loyalty-points liability accrual (`2200`/`5600` exist in the chart of
-    accounts, but this app has no defined dollar redemption value per point to post against);
-    multi-currency (N/A — spec says so too); budgets and budget-vs-actual variance; and the
-    weekly Stripe-payout bank reconciliation workflow.
-- **HR & staffing** (`carwash-compile/03-operations/hr.md`, `server/src/services/payrollService.js`)
-  — a real `Employee` roster, explicitly distinct from the login/RBAC `role` on `users` per
-  the spec's own note (`employees.user` links the two but is nullable either way — an
-  Applicant with no login yet, or an admin login with no HR record, are both valid).
-  - **Scheduling**: `Shift` (employee × time window × optional bay). A shift is flagged
-    `isLate` (the spec's `shift-no-show-alert` signal) computed live the same way ticket SLA
-    risk is — this app has no scheduler to push it proactively. Clock-in/clock-out are this
-    app's own addition (there's no clock-in kiosk hardware to read instead).
-  - **Leave**: request → site-manager approval. The spec's own `google-calendar` integration
-    that would make `Shift` scheduling "automatically respect" approved leave isn't built —
-    instead, creating a `Shift` that overlaps an *approved* leave request is rejected
-    directly (409), the same practical effect without a real calendar. The 10-PTO-day/year
-    monthly accrual math isn't computed (a request/approve workflow only).
-  - **Payroll**: `POST /hr/payroll-runs` sums `Shift` hours (hourly staff) or `annualSalary /
-    26` (salaried, `payrollCadence: biweekly`), plus detail-technician commission — read
-    directly off `WashOrder.price`/`PackagePricing.price`, the spec's own "commission
-    tie-back" so it can never disagree with the P&L's revenue figure — and posts one entry to
-    `5000 Payroll Expense` in the ledger built in the previous phase. `washOrderController`
-    now records `assignedTechnician` (a column that existed since Phase 1 but nothing ever
-    set) when a wash starts, so this has something real to compute against.
-  - `/hr` (admin/manager, tabbed: Employees / Shifts / Leave / Payroll).
-  - **Not built**, per the spec's own text: real state withholding, Stripe disbursement
-    (this only posts the accounting entry — no real money moves), pay-stub document
-    generation (needs `06-platform/knowledge-base.md`'s document store), and the quarterly/
-    annual performance-review workflow (the spec's own text says not to build this as a
-    standing agent at this scale either).
-- **Inventory & purchasing** (`carwash-compile/03-operations/inventory.md`,
-  `server/src/agents/inventoryForecasterAgent.js`) — Supply (consolidating the spec's own
-  separate Supply/Stock entities into one `quantityOnHand` column; single location, no
-  batch/lot tracking, `stockTransfers: false` — a documented simplification, not a missing
-  feature), `PurchaseOrder` (`Draft → Sent → PartiallyReceived → Received → Closed`), and
-  stock write-offs, plus `inventory-forecaster`.
-  - `inventory-forecaster` makes **no Claude call** either — same reasoning as
-    `membership-billing-agent`: "predicts usage ... flags reorder points" is a rolling
-    average and a threshold comparison, not a judgment call. Reads trailing 7-day completed
-    `WashOrder` volume *by package*, against a `packageSupplyUsage` table (how much of a
-    given Supply one wash of a given Package consumes) — the spec's own "chemical
-    consumption scales with package mix, not just wash count." Recommends reordering to a
-    30-day par level whenever on-hand drops below a 7-day supply; POs under $150
-    auto-approve and send, above it stay `Draft` for a manual approval. Its own trigger
-    ("nightly schedule") isn't built — this app has no scheduler, so a site-manager runs it
-    on demand from `/inventory`'s Forecast tab instead. **Known simplification**:
-    recommendations don't subtract quantity already on an open PO for the same supply, so
-    running it twice before a shipment arrives double-recommends (and, on "Run forecast
-    now," double-orders) — a sharper edge on the on-demand substitute than the spec's own
-    once-nightly cadence would ever hit.
-  - **Receiving a shipment** posts the A/P entry (`1400 Chemical & Supply Inventory` /
-    `2000 Supplier Payables`) and **closing** a fully-received PO posts the cash settlement
-    (`2000` / `1000 Cash`) — the first real activity on either of those two accounts, seeded
-    but dead since the finance phase. A **stock write-off** (`breakage`/`spillage`/`theft`/
-    `expired`/`count-correction`, always requiring an `Employee` approver) posts to
-    `5700 Inventory Shrinkage Expense` the same way.
-  - `/inventory` (admin/manager, tabbed: Supplies / Purchase Orders / Adjustments /
-    Forecast).
-  - **Not built**: multi-warehouse stock transfers (the spec's own `stockTransfers: false`
-    says skip it), and a `fleet-account-manager` bonus tie-in (`Customer.isFleetAccount`
-    doesn't exist in this app's `Customer` model).
-- **Simulation & forecasting** (`carwash-compile/02-intelligence/simulation.md`,
-  `server/src/services/simulationService.js`) — build-order step 8, the last one. Five of
-  the spec's seven models, all **pure, stateless computations over data this app already
-  has** — nothing is persisted, the same "compute live, don't push" posture as ticket SLA
-  risk and shift no-show flags. Every stated assumption (variable-cost components, service
-  rates, price elasticity) is a named, editable constant in one place, and every number in
-  every API response carries a `dataSource: 'observed' | 'industry-benchmark'` label — the
-  spec's own "Calibration and honesty" rule that a founder "needs to know how much to trust
-  the number."
-  - **bay-throughput-queue-simulator** and **membership-economics-simulator** — the spec's
-    own "two that matter most... get the deepest treatment" — are both fully built.
-    Bay-throughput reads real `ServiceBay.avgThroughputPerHour` and recent `WashOrder` queue
-    volume by lane to flag a structurally-undersized bay/hour combination. Membership
-    economics computes a real variable-cost-per-wash from actual `Employee` wage data (not
-    just the spec's own worked-example constants) and each plan's real
-    `washesThisCycle`/cancellation history once there's enough of it, falling back to the
-    spec's own industry-benchmark distribution (median 3.2 washes/month, ~14-month tenure)
-    until then — exactly the "ship with labeled defaults from day one" the spec calls for.
-  - **demand-forecast**: a real day-of-week/hour-of-day curve from `WashOrder` history once
-    ~8 weeks exist; an industry-benchmark-shaped curve, clearly labeled, before that (this
-    session's own seed data is all "today," so it always shows the benchmark path — a good
-    live demonstration of the fallback, not a bug). **Not built**: the spec's own
-    `weather-api` rain/pollen overlay (no weather integration exists).
-  - **staffing-capacity-simulator** ties the demand forecast against real `Shift` coverage
-    (from the HR phase) to flag understaffed hour/day combinations, at stated
-    vehicles-per-hour service-rate assumptions per role.
-  - **cash-flow-forecast** projects a weekly grid from real membership MRR, demand-derived
-    pay-per-wash revenue, and real trailing payroll/purchase-order/expense outflow (from the
-    finance, HR, and inventory phases) — flags any week the running balance would go
-    negative.
-  - **pricing-scenario-simulator** is interactive on `/simulations`: pick a plan, a price
-    change %, and an elasticity assumption (default -0.3, the spec's own "10% price increase
-    costs ~3% of the member base"), see the projected member-count/revenue/margin delta
-    live.
-  - **Not built**: **downtime-cost-simulator** — its own inputs (`Asset.status = 'down'`
-    windows) come from `03-operations/assets-iot.md`, which needs an Asset/IoT entity this
-    app doesn't have, so there's nothing to compute it from yet.
-- **Orchestrator & advisor agents** (`02-intelligence/ai-agents.md`'s "Orchestrator" and
-  "Advisor agents" sections, `server/src/agents/{opsOrchestrator,strategyAdvisor,systemHealthAgent}.js`)
-  — the last two clusters of the 12-agent roster this app implements against real entities,
-  built once the four specialist agents below existed for them to sit above.
-  - **`ops-orchestrator`** makes **no Claude call** — its own guardrail ("routing only, no
-    independent transactional authority") describes deterministic aggregation, not a
-    judgment call, the same reasoning that kept `membership-billing-agent` and
-    `inventory-forecaster` LLM-free. It aggregates real queue depth, bay status, the current
-    hour's staffing gap (from the simulation phase), unread escalation-type notifications,
-    and open tickets into one "operating picture," and deterministically names which
-    specialist/automation already owns each flagged condition — real routing logic, not a
-    narrated summary.
-  - **`strategy-advisor`** is genuinely open-ended — "answers open-ended owner questions...
-    with a structured, traceable recommendation" — so it does call Claude, grounded in a
-    single injected snapshot of real bay-throughput/membership-economics/cash-flow/staffing
-    data rather than a `wash-concierge`-style tool-use loop (an owner's question doesn't need
-    the model poking at live tables turn by turn). No tools at all — the guardrail "never
-    commits to a lease, hire, price change" is structural, not just an instruction. A new
-    `strategy_recommendations` table *is* the spec's own "remembers prior recommendations...
-    12 months" requirement: a real row per question, with a cheap word-overlap check
-    surfacing (and asking Claude to explicitly reference, not silently contradict) a related
-    earlier question. No key configured → a plain fallback message pointing at the
-    Finance/Simulations/Reports pages directly, not a blocked request.
-  - **`system-health-agent`** also calls Claude (root-cause-5-whys: is a rate "off," and if
-    so, why — a real judgment call) to narrate a weekly report over a new `agent_metrics`
-    table — nothing logged agent invocations before this phase, so every credential-gated
-    agent (`queue-dispatch-agent`, `wash-concierge`, `membership-billing-agent`,
-    `inventory-forecaster`, `strategy-advisor`) now records one row per call
-    (`server/src/utils/agentMetrics.js`, fire-and-forget). Its own system prompt explicitly
-    refuses the spec's named anti-pattern — "never propose lowering an escalation-confidence
-    threshold as the fix for a high escalation rate." No key configured → the raw computed
-    per-agent rates without a narrative, still a real report, just not written up.
-  - Both agents' real triggers ("every 5 minutes," "weekly, Monday 6am") need a scheduler
-    this app doesn't have (the same documented gap as the -3d/-2h reminder jobs and
-    proactive SLA alerts) — a site-manager runs both on demand from the new `/ops-center`
-    page instead.
-- **Growth cluster** (`carwash-compile/04-growth/marketing.md`, `04-growth/social-media.md`)
-  — the two remaining task agents this app can build against real (if manually-entered)
-  data rather than a live ad-platform or Google Business Profile connector it has no
-  credentials for, plus the spec's own customer segmentation and referral program.
-  - **Customer segmentation** (`server/src/services/segmentService.js`) — the marketing
-    spec's own 7-segment table (New / Active Pay-Per-Wash / Active Member / At-Risk Member /
-    At-Risk Pay-Per-Wash / Lapsed / Fleet-Commercial), computed live from real `WashOrder`/
-    `MembershipSubscription` data, with an explicit precedence order for a customer whose
-    segments would otherwise overlap (e.g. a fleet account is always Fleet/Commercial first).
-    The spec's own "2+ missed expected visits this cycle" clause for At-Risk Member isn't
-    computed — this app has no per-member expected-visit-cadence baseline to miss against —
-    so only the "recent PastDue" half of that definition is checked.
-  - **`fleet-lead-scorer`** makes **no Claude call** — scoring three stated inputs (vehicle
-    count, contact pattern, invoicing-terms request) against stated point values is
-    arithmetic, not a judgment call. New `Customer.isFleetAccount` field and `fleet_inquiries`
-    table; never commits to custom pricing itself, only ever a staff notification.
-  - **`review-response-agent`** also makes **no Claude call**, deliberately: the guardrail
-    ("never auto-responds to a review below 4 stars or one mentioning damage/injury/billing")
-    is a rating threshold plus a keyword check, not free-form sentiment judgment — a
-    coarser check than an LLM's read, but one that never has a false "auto-responded" on a
-    review that should have been escalated, the conservative failure mode the spec's own
-    reputational-risk framing asks for. A positive review with no flagged keywords
-    auto-thanks with a loyalty-point credit; anything else opens a real `Ticket` and alerts
-    staff immediately, never auto-responded.
-  - **Referral program**: every customer gets a stable `referralCode` at creation;
-    `referredByCode` is checked once, on a referred customer's first-ever completed
-    `WashOrder`, crediting the referrer a free-wash credit (modeled as loyalty points, since
-    there's no redeemable-credit ledger or checkout-time "apply a free wash" flow to redeem
-    a real credit against). **New-customer-welcome** fires its day-0 rung (thank-you +
-    loyalty-points explainer) on that same first wash.
-  - `/growth` (admin/manager, tabbed: Segments / Fleet Inquiries / Reviews).
-  - **Not built**: the day-3/day-10 (new-customer-welcome) and day-4/day-8 (at-risk-member-
-    winback, whose day-0 the finance phase's own payment-failed dunning already covers)
-    follow-up rungs of each lifecycle drip (need a scheduler this app doesn't have); the
-    `SocialPost` content-calendar publishing pipeline; paid ad campaigns and A/B testing
-    (need real ad-platform accounts); and the Google Business Profile/social-mention
-    monitoring that would detect a review automatically instead of a staff member logging it.
-- **Not built yet**: the rest of the AI agent roster (`predictive-maintenance-agent` and
-  `quality-anomaly-detector` — need IoT telemetry this app has no sensors for; `phone-line-agent`
-  — needs a real telephony API); the wash-sensor/IoT platform; the -3d/-2h reminder jobs and
-  proactive SLA-breach alerting (need a scheduler this app doesn't run yet) —
-  and RBAC only covers this app's existing admin/manager/staff login roles, not the spec's
-  full 7-role breakdown (Owner/Site Manager/Bay Attendant/Wash Technician/Detail
-  Technician/Cashier/Fleet Account Manager) — the new `Employee.position` field captures the
-  job title, but doesn't yet drive what a person can actually do in the system.
+- **Stripe — membership billing.** With `STRIPE_SECRET_KEY` set, a "New membership" signup redirects to a hosted Stripe Checkout Session and `POST /api/webhooks/stripe` drives the subscription's Active ↔ Past-Due / Suspended / Cancelled lifecycle from real `invoice.payment_failed`, `invoice.payment_succeeded`, and `customer.subscription.deleted` events. Without it, signup creates the subscription locally as `active` with no real charge — clearly labeled "demo mode" in the UI. (The past-due → suspend → cancel thresholds are evaluated deterministically on each webhook event, not by an external agent.)
+- **WhatsApp Cloud API — customer messaging.** Automations (`notify-ready-for-pickup`, membership welcome/dunning) attempt a real template send when `WHATSAPP_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` are set (named templates must still exist and be Meta-approved). Otherwise every attempt is recorded in `customer_messages` with `status: not_configured`, so the audit trail stays intact either way.
+- `GET /api/integrations/status` reports live connection state.
+
+## What is in this app (module notes)
+
+These are kept deliberately simple and deterministic — no background schedulers, no external AI calls:
+
+- **Wash floor lifecycle** — queue entry → auto bay assignment (matched to the package's tunnel/detail-bay lane) → start → complete → quality check (pass → ready for pickup; fail → rework) → checkout, plus cancel from queued/bay-assigned. State transitions are enforced server-side (`washOrderController.js`).
+- **Role-based floor views** — `/floor` "My Queue" (any floor role): next queued vehicles, next open bay, one-tap log/assign/start/complete/QC. `/checkout` (any role): ready-for-pickup queue + today's revenue split. `/wash-queue` (admin/manager): the full 6-bay status board and order history.
+- **Automations** (`server/src/utils/automations.js`) — deterministic reactions: `notify-ready-for-pickup` (WhatsApp template or logged attempt), `queue-wait-alert` (admin/manager notify when queue > 8 or predicted wait > 20 min, deduped per 15-min window), `bay-down-reroute` (reroute or requeue affected orders, escalate mid-service ones), and membership dunning/welcome messages.
+- **Support tickets** — open → in-progress → waiting-on-customer/resolved → closed with server-enforced transitions, per-category SLA deadlines computed live (risk shown in the UI), staff assignment, and a comment thread. Customer 360 profiles surface membership + ticket history alongside wash history.
+- **HR & staffing** — employee roster (explicitly distinct from login roles), shift scheduling with clock-in/out and live late-flags, leave requests with approval.
+- **Inventory & purchasing** — supplies with stock levels, stock adjustments (always require an employee approver), and purchase orders with approve → receive → close flow; per-package chemical consumption (`package_supply_usage`) informs reorder stock levels shown in the supplies list.
+
+## What is not in this app
+
+Kept out on purpose (removed from an earlier architecture) — these features are **not** present, and the UI/API/DB reflect that:
+
+- **AI agents** — the 12-agent roster (queue-dispatch, wash-concierge chat, membership-billing, inventory-forecaster, ops-orchestrator, strategy-advisor, system-health, fleet-lead-scorer, review-response, predictive-maintenance, quality-anomaly, phone-line) and the Anthropic SDK. No `config/anthropic.js`, no `agents/` folder, no agent tables. The behavior that needed judgment defaults to deterministic code (e.g. the queue-wait alert uses a fixed recommendation message).
+- **WhatsApp inbound webhook / chat agent** — the `/api/webhooks/whatsapp` endpoints and concierge conversation tables. WhatsApp remains **outbound only** (automation templates).
+- **Double-entry accounting ledger** — chart of accounts, journal entries/lines, and the `/ledger`, `/finance`, and P&L surfaces. Routine money flows (checkout, membership charges, expenses, payroll, purchasing) are no longer auto-posted to a ledger; the `expenses` table remains the record of spend.
+- **Payroll runs** — wage/commission computation and the `/hr/payroll-runs` endpoints. HR keeps employees, shifts, and leave.
+- **Simulations & forecasting** — the five models under `/simulations` (also removed the `/inventory/forecast` passenger-and-reorder endpoint and forecast tab).
+- **Growth automations** — customer segmentation, fleet-lead scoring, review-response, and the `/growth` pages (segments/fleet-inquiries/reviews) and their tables. Referral codes are still generated for customers and loyalty points are still credited on checkout, but the auto-credit-on-first-wash referral tie-in was removed.
+
+**Also note:** the app has no job scheduler — everything that could be "nightly/weekly" (reorder recommendations, SLA reminders, drip campaigns) is either on-demand or computed live on read. RBAC covers the three login roles (`admin`/`manager`/`staff`); `Employee.position` records job titles but doesn't yet restrict screens per the spec's full role breakdown.
 
 ## Responsiveness
 

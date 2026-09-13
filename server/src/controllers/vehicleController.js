@@ -1,5 +1,5 @@
 const asyncHandler = require('express-async-handler');
-const { eq, desc, ilike, and, sql } = require('drizzle-orm');
+const { eq, desc, like, and } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { vehicles, customers, bookings } = require('../db/schema');
 
@@ -24,7 +24,7 @@ const getVehicles = asyncHandler(async (req, res) => {
   const { customer, search } = req.query;
   const filters = [];
   if (customer) filters.push(eq(vehicles.customer, customer));
-  if (search) filters.push(ilike(vehicles.plateNumber, `%${search}%`));
+  if (search) filters.push(like(vehicles.plateNumber, `%${search}%`));
 
   const rows = await db
     .select(withCustomer)
@@ -123,6 +123,8 @@ const getCustomerBundle = async (customerId) => {
 // GET /api/vehicles/plate/:plate — scan-to-lookup entry point.
 // Matches on a normalized plate (alphanumerics only, case-insensitive),
 // falling back to a substring match so partial OCR reads still resolve.
+// SQLite has no regexp_replace (PG's plate-normalizer), so normalization runs in JS over
+// the vehicle directory — fine at this app's per-site volume.
 const lookupByPlate = asyncHandler(async (req, res) => {
   const plate = String(req.params.plate || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (plate.length < 2) {
@@ -130,21 +132,14 @@ const lookupByPlate = asyncHandler(async (req, res) => {
     throw new Error('A valid plate number is required');
   }
 
-  const normalizedPlate = sql`upper(regexp_replace(${vehicles.plateNumber}, '[^A-Za-z0-9]', '', 'g'))`;
-  const baseQuery = db
+  const normalize = (p) => String(p || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const rows = await db
     .select(withCustomer)
     .from(vehicles)
     .innerJoin(customers, eq(vehicles.customer, customers._id));
 
-  let [vehicle] = await baseQuery.where(eq(normalizedPlate, plate)).limit(1);
-  if (!vehicle) {
-    [vehicle] = await db
-      .select(withCustomer)
-      .from(vehicles)
-      .innerJoin(customers, eq(vehicles.customer, customers._id))
-      .where(sql`${normalizedPlate} LIKE ${`%${plate}%`}`)
-      .limit(1);
-  }
+  let vehicle = rows.find((r) => normalize(r.plateNumber) === plate);
+  if (!vehicle) vehicle = rows.find((r) => normalize(r.plateNumber).includes(plate));
   if (!vehicle) {
     res.status(404);
     throw new Error(`No vehicle found for plate "${plate}"`);

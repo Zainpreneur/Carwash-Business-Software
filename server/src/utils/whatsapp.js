@@ -1,8 +1,8 @@
 // WhatsApp Business Platform Cloud API direct integration (04-growth/whatsapp.md's own
 // platform-setup choice: "cost-sensitive, simple-setup default" for a single-location
 // business). Degrades to a clear not_configured result — never throws — when
-// WHATSAPP_TOKEN/WHATSAPP_PHONE_NUMBER_ID aren't set, so callers (utils/automations.js,
-// agents/washConcierge.js) can always log the outcome regardless of whether a real account
+// WHATSAPP_TOKEN/WHATSAPP_PHONE_NUMBER_ID aren't set, so callers (utils/automations.js and
+// the concierge flow) can always log the outcome regardless of whether a real account
 // is connected.
 const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
 
@@ -53,8 +53,8 @@ const sendWhatsAppTemplate = (toPhone, templateName, params = {}) =>
   });
 
 // Free-form text — only valid as a reply within Meta's 24-hour window after the customer's
-// last inbound message, which is exactly wash-concierge's situation (always replying to a
-// message just received). Never used for an automation-initiated send; those use a template.
+// last inbound message (e.g. replying to a message just received). Never used for an
+// automation-initiated send; those use a template.
 const sendWhatsAppText = (toPhone, text) =>
   sendWhatsAppPayload({
     messaging_product: 'whatsapp',

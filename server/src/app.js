@@ -18,16 +18,10 @@ const serviceBayRoutes = require('./routes/serviceBayRoutes');
 const membershipPlanRoutes = require('./routes/membershipPlanRoutes');
 const membershipSubscriptionRoutes = require('./routes/membershipSubscriptionRoutes');
 const integrationRoutes = require('./routes/integrationRoutes');
-const conciergeRoutes = require('./routes/conciergeRoutes');
 const ticketRoutes = require('./routes/ticketRoutes');
-const ledgerRoutes = require('./routes/ledgerRoutes');
 const hrRoutes = require('./routes/hrRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
-const simulationRoutes = require('./routes/simulationRoutes');
-const agentOpsRoutes = require('./routes/agentOpsRoutes');
-const growthRoutes = require('./routes/growthRoutes');
 const { handleStripeWebhook } = require('./controllers/stripeWebhookController');
-const { verifyWebhook, receiveMessage } = require('./controllers/whatsappWebhookController');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -44,12 +38,6 @@ app.use(
 // registered before the global express.json() body parser below, and unauthenticated
 // (Stripe, not a logged-in user, calls this; the signature check is the auth).
 app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), handleStripeWebhook);
-
-// WhatsApp Cloud API webhook — wash-concierge's inbound channel. GET is Meta's one-time
-// verification handshake (no body); POST needs the raw bytes for the optional
-// X-Hub-Signature-256 check, same reasoning as the Stripe webhook above.
-app.get('/api/webhooks/whatsapp', verifyWebhook);
-app.post('/api/webhooks/whatsapp', express.raw({ type: 'application/json' }), receiveMessage);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -74,14 +62,20 @@ app.use('/api/service-bays', serviceBayRoutes);
 app.use('/api/membership-plans', membershipPlanRoutes);
 app.use('/api/membership-subscriptions', membershipSubscriptionRoutes);
 app.use('/api/integrations', integrationRoutes);
-app.use('/api/concierge', conciergeRoutes);
 app.use('/api/tickets', ticketRoutes);
-app.use('/api/ledger', ledgerRoutes);
 app.use('/api/hr', hrRoutes);
 app.use('/api/inventory', inventoryRoutes);
-app.use('/api/simulations', simulationRoutes);
-app.use('/api/agent-ops', agentOpsRoutes);
-app.use('/api/growth', growthRoutes);
+
+// Single-process mode: serve the built React app (server/static) from Express so the
+// whole product runs as ONE node server on ONE port. Skipped when no build exists,
+// which keeps the dev flow (Vite dev server) fully intact.
+const path = require('path');
+const fs = require('fs');
+const staticDir = path.join(__dirname, '..', 'static');
+if (fs.existsSync(path.join(staticDir, 'index.html'))) {
+  app.use(express.static(staticDir));
+  app.get(/^(?!\/api).*/, (req, res) => res.sendFile(path.join(staticDir, 'index.html')));
+}
 
 app.use(notFound);
 app.use(errorHandler);

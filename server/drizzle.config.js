@@ -1,12 +1,10 @@
 require('dotenv').config();
 
 module.exports = {
-  dialect: 'postgresql',
+  dialect: 'sqlite',
   schema: './src/db/schema.js',
   out: './drizzle',
   dbCredentials: {
-    url:
-      process.env.DATABASE_URL ||
-      `postgres://${process.env.PGUSER || process.env.USER || 'root'}@localhost:5432/carwash`,
+    url: process.env.LIBSQL_URL || 'file:local.db',
   },
 };

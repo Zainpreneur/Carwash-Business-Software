@@ -1,14 +1,11 @@
-// Shared enroll-membership logic (01-foundation/data-model.md) — used by both the HTTP
-// endpoint (membershipController.createSubscription) and wash-concierge's
-// start_membership_signup tool, so a chat-driven signup goes through the exact same Stripe/
-// demo-mode path a cashier-driven one does. Throws a plain Error with a `.status` for the
-// HTTP layer to map; callers that aren't HTTP (the agent) just read `.message`.
+// Shared enroll-membership logic (01-foundation/data-model.md) — used by the HTTP
+// endpoint (membershipController.createSubscription) so a cashier-driven signup works. The
+// wash-concierge chat path no longer exists (AI agents were cut); this is HTTP-only now.
 const { eq, and, inArray } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { membershipPlans, membershipSubscriptions, customers } = require('../db/schema');
 const { getStripe, isStripeConfigured } = require('../config/stripe');
 const { sendMembershipWelcome } = require('../utils/automations');
-const { postMembershipCharge } = require('./ledgerService');
 
 const ACTIVE_SUB_STATUSES = ['active', 'past-due', 'suspended', 'paused'];
 
@@ -95,13 +92,6 @@ const createSubscription = async ({ customerId, vehicleId, planId, successUrl, c
     .returning();
 
   sendMembershipWelcome(created).catch(() => {});
-  // Demo mode simulates a successful first charge (the subscription is created 'active'
-  // with no real Stripe payment) — the ledger posts the same as if it had been real, same
-  // "demo mode" posture as the rest of this feature: it behaves like the real thing, it just
-  // isn't backed by a real charge.
-  postMembershipCharge(created, plan.monthlyPrice, `${plan.name} membership signup (demo mode)`).catch((err) =>
-    console.error('[ledger] membership signup post failed:', err.message)
-  );
 
   return { mode: 'local', subscription: created };
 };

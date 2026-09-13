@@ -83,15 +83,16 @@ const getRevenueChart = asyncHandler(async (req, res) => {
   const days = Number(req.query.days) || 14;
   const start = startOfDay(new Date(Date.now() - (days - 1) * 24 * 60 * 60 * 1000));
 
+  const dayKey = sql`strftime('%Y-%m-%d', datetime(${bookings.scheduledAt} / 1000, 'unixepoch'))`;
   const results = await db
     .select({
-      day: sql`to_char(${bookings.scheduledAt}, 'YYYY-MM-DD')`,
+      day: dayKey,
       revenue: sql`coalesce(sum(${bookings.total}), 0)`.mapWith(Number),
       bookingsCount: count(),
     })
     .from(bookings)
     .where(and(eq(bookings.status, 'completed'), gte(bookings.scheduledAt, start)))
-    .groupBy(sql`to_char(${bookings.scheduledAt}, 'YYYY-MM-DD')`);
+    .groupBy(dayKey);
 
   const map = new Map(results.map((r) => [r.day, r]));
   const series = [];

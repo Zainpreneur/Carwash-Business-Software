@@ -1,5 +1,5 @@
 const asyncHandler = require('express-async-handler');
-const { eq, desc, or, ilike, count, inArray, and } = require('drizzle-orm');
+const { eq, desc, or, like, count, inArray, and } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { customers, vehicles, bookings, membershipSubscriptions, membershipPlans, tickets } = require('../db/schema');
 const { withSla, OPEN_STATUSES } = require('../utils/tickets');
@@ -8,9 +8,9 @@ const getCustomers = asyncHandler(async (req, res) => {
   const { search, page = 1, limit = 20 } = req.query;
   const where = search
     ? or(
-        ilike(customers.name, `%${search}%`),
-        ilike(customers.phone, `%${search}%`),
-        ilike(customers.email, `%${search}%`)
+        like(customers.name, `%${search}%`),
+        like(customers.phone, `%${search}%`),
+        like(customers.email, `%${search}%`)
       )
     : undefined;
 

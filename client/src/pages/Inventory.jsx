@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { format } from 'date-fns'
-import { Plus, Boxes, ClipboardList, AlertTriangle, Sparkles, PackageCheck, PackageX } from 'lucide-react'
+import { Plus, Boxes, ClipboardList, AlertTriangle, PackageCheck, PackageX } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { inventoryApi, hrApi } from '../api/resources'
 import { getErrorMessage } from '../api/client'
@@ -9,9 +9,8 @@ import Spinner from '../components/ui/Spinner'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
 
-// Inventory & purchasing (03-operations/inventory.md). inventory-forecaster's
-// recommendations are read-only here until "Run forecast now" actually creates the POs —
-// this app has no nightly scheduler, so a site-manager triggers it on demand instead.
+// Inventory & purchasing (03-operations/inventory.md). Managing supplies, stock
+// adjustments, and purchase orders.
 const REASON_CODES = ['breakage', 'spillage', 'theft', 'expired', 'count-correction']
 const currency = (n) => `$${Number(n || 0).toFixed(2)}`
 const emptySupplyForm = { name: '', warehouse: 'main-chemical-room', unit: 'unit', quantityOnHand: '', unitCost: '', supplier: '' }
@@ -21,7 +20,6 @@ const TABS = [
   { key: 'supplies', label: 'Supplies', icon: Boxes },
   { key: 'orders', label: 'Purchase Orders', icon: ClipboardList },
   { key: 'adjustments', label: 'Adjustments', icon: AlertTriangle },
-  { key: 'forecast', label: 'Forecast', icon: Sparkles },
 ]
 
 const Inventory = () => {
@@ -29,7 +27,6 @@ const Inventory = () => {
   const [supplies, setSupplies] = useState([])
   const [orders, setOrders] = useState([])
   const [adjustments, setAdjustments] = useState([])
-  const [forecast, setForecast] = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -44,12 +41,11 @@ const Inventory = () => {
 
   const load = useCallback(() => {
     setLoading(true)
-    Promise.all([inventoryApi.supplies.list(), inventoryApi.purchaseOrders.list(), inventoryApi.adjustments.list(), inventoryApi.forecast.preview(), hrApi.employees.list()])
-      .then(([s, o, a, f, e]) => {
+    Promise.all([inventoryApi.supplies.list(), inventoryApi.purchaseOrders.list(), inventoryApi.adjustments.list(), hrApi.employees.list()])
+      .then(([s, o, a, e]) => {
         setSupplies(s)
         setOrders(o)
         setAdjustments(a)
-        setForecast(f)
         setEmployees(e)
       })
       .catch((err) => toast.error(getErrorMessage(err)))
@@ -92,19 +88,6 @@ const Inventory = () => {
       toast.error(getErrorMessage(err))
     } finally {
       setSaving(false)
-    }
-  }
-
-  const runForecast = async () => {
-    setBusy(true)
-    try {
-      const created = await inventoryApi.forecast.run()
-      toast.success(created.length ? `${created.length} purchase order(s) created` : 'Nothing to reorder right now')
-      load()
-    } catch (err) {
-      toast.error(getErrorMessage(err))
-    } finally {
-      setBusy(false)
     }
   }
 
@@ -173,7 +156,6 @@ const Inventory = () => {
             className={`flex items-center gap-1.5 rounded-t-lg px-3 py-2 text-sm font-medium ${tab === t.key ? 'bg-brand-50 text-brand-700' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <t.icon size={15} /> {t.label}
-            {t.key === 'forecast' && forecast.length > 0 && <span className="ml-1 rounded-full bg-rose-500 px-1.5 text-xs text-white">{forecast.length}</span>}
           </button>
         ))}
       </div>
@@ -251,39 +233,6 @@ const Inventory = () => {
                         <td className="capitalize text-xs text-slate-500">{a.reasonCode.replace('-', ' ')}</td>
                         <td className="text-xs text-slate-500">{a.approvedBy.name}</td>
                         <td className="text-xs text-slate-500">{format(new Date(a.createdAt), 'MMM d, yyyy')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {tab === 'forecast' && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">Reorder to a 30-day par level whenever on-hand drops below a 7-day average-consumption supply, from trailing wash volume by package mix.</p>
-            <button className="btn-primary shrink-0" disabled={busy || forecast.length === 0} onClick={runForecast}>
-              <Sparkles size={16} /> Run forecast now
-            </button>
-          </div>
-          {forecast.length === 0 ? (
-            <div className="card"><EmptyState icon={Sparkles} title="Nothing needs reordering" message="Every supply is above its 7-day reorder point." /></div>
-          ) : (
-            <div className="card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="table">
-                  <thead><tr><th>Supply</th><th>On hand</th><th>7-day supply</th><th>Recommended order</th><th>Est. cost</th></tr></thead>
-                  <tbody>
-                    {forecast.map((f) => (
-                      <tr key={f.supply._id}>
-                        <td className="font-medium text-slate-800">{f.supply.name}</td>
-                        <td className="text-rose-600">{f.supply.quantityOnHand} {f.supply.unit}</td>
-                        <td>{f.sevenDaySupply} {f.supply.unit}</td>
-                        <td>{f.recommendedQuantity} {f.supply.unit}</td>
-                        <td>{currency(f.estimatedCost)}</td>
                       </tr>
                     ))}
                   </tbody>

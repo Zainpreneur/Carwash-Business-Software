@@ -1,5 +1,5 @@
 const asyncHandler = require('express-async-handler');
-const { eq, desc, asc, and, gte, lte, inArray, ilike, sql, count } = require('drizzle-orm');
+const { eq, desc, asc, and, gte, lte, inArray, like, sql, count } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { bookings, bookingServices, services, customers, vehicles, users } = require('../db/schema');
 const { notifyRoles } = require('../utils/notify');
@@ -12,7 +12,7 @@ const generateBookingNumber = async () => {
   const [{ total }] = await db
     .select({ total: count() })
     .from(bookings)
-    .where(ilike(bookings.bookingNumber, `${prefix}%`));
+    .where(like(bookings.bookingNumber, `${prefix}%`));
   return `${prefix}-${String(Number(total) + 1).padStart(3, '0')}`;
 };
 

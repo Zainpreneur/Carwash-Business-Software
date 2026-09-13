@@ -12,14 +12,9 @@ import {
   ListOrdered,
   LogOut,
   Users2,
-  Bot,
   LifeBuoy,
-  Landmark,
   BriefcaseBusiness,
   Boxes,
-  Telescope,
-  LayoutGrid,
-  Megaphone,
 } from 'lucide-react'
 
 // Role-based wash-floor views (carwash-compile/01-foundation/dashboards.md):
@@ -32,7 +27,6 @@ export const navItems = [
   { to: '/checkout', label: 'Checkout', icon: LogOut, roles: ['admin', 'manager', 'staff'] },
   { to: '/wash-queue', label: 'Wash Ops', icon: Waves, roles: ['admin', 'manager'] },
   { to: '/memberships', label: 'Memberships', icon: Users2, roles: ['admin', 'manager'] },
-  { to: '/concierge', label: 'Concierge', icon: Bot, roles: ['admin', 'manager'] },
   { to: '/tickets', label: 'Support', icon: LifeBuoy, roles: ['admin', 'manager', 'staff'] },
   { to: '/bookings', label: 'Bookings', icon: CalendarClock, roles: ['admin', 'manager', 'staff'] },
   { to: '/customers', label: 'Customers', icon: Users, roles: ['admin', 'manager', 'staff'] },
@@ -42,10 +36,6 @@ export const navItems = [
   { to: '/hr', label: 'HR', icon: BriefcaseBusiness, roles: ['admin', 'manager'] },
   { to: '/inventory', label: 'Inventory', icon: Boxes, roles: ['admin', 'manager'] },
   { to: '/expenses', label: 'Expenses', icon: Receipt, roles: ['admin', 'manager'] },
-  { to: '/finance', label: 'Finance', icon: Landmark, roles: ['admin', 'manager'] },
   { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'manager'] },
-  { to: '/simulations', label: 'Simulations', icon: Telescope, roles: ['admin', 'manager'] },
-  { to: '/ops-center', label: 'Ops Center', icon: LayoutGrid, roles: ['admin', 'manager'] },
-  { to: '/growth', label: 'Growth', icon: Megaphone, roles: ['admin', 'manager'] },
   { to: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'manager', 'staff'] },
 ]

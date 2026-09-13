@@ -7,15 +7,40 @@ const { db } = require('../config/db');
 const { membershipSubscriptions } = require('../db/schema');
 const { getStripe, isStripeConfigured, isWebhookConfigured } = require('../config/stripe');
 const { membershipPaymentFailedDunning, membershipSuspended, membershipCancelledForNonPayment, sendMembershipWelcome } = require('../utils/automations');
-const { postMembershipCharge } = require('../services/ledgerService');
-const { evaluateFailedPayment, evaluateSucceededPayment } = require('../agents/membershipBillingAgent');
-const { recordAgentEvent } = require('../utils/agentMetrics');
+
+// Membership billing state machine (was the deterministic portion of the cut
+// membership-billing-agent): 3 failed attempts or 7 days unresolved -> suspended,
+// 30 days unresolved -> cancelled. No I/O, pure decision functions.
+const SUSPEND_AFTER_ATTEMPTS = 3;
+const SUSPEND_AFTER_DAYS = 7;
+const CANCEL_AFTER_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const nextMonth = (from = new Date()) => {
   const d = new Date(from);
   d.setMonth(d.getMonth() + 1);
   return d;
 };
+
+const evaluateFailedPayment = (subscription, now = new Date()) => {
+  const attempts = (subscription.failedPaymentAttempts || 0) + 1;
+  const firstFailedAt = subscription.firstFailedAt ? new Date(subscription.firstFailedAt) : now;
+  const daysUnresolved = (now - firstFailedAt) / DAY_MS;
+
+  if (subscription.status === 'suspended') {
+    if (daysUnresolved >= CANCEL_AFTER_DAYS) {
+      return { status: 'cancelled', failedPaymentAttempts: attempts, firstFailedAt };
+    }
+    return { status: 'suspended', failedPaymentAttempts: attempts, firstFailedAt };
+  }
+
+  if (attempts >= SUSPEND_AFTER_ATTEMPTS || daysUnresolved >= SUSPEND_AFTER_DAYS) {
+    return { status: 'suspended', failedPaymentAttempts: attempts, firstFailedAt };
+  }
+  return { status: 'past-due', failedPaymentAttempts: attempts, firstFailedAt };
+};
+
+const evaluateSucceededPayment = () => ({ status: 'active', failedPaymentAttempts: 0, firstFailedAt: null });
 
 const handleCheckoutCompleted = async (session) => {
   if (session.mode !== 'subscription') return;
@@ -58,7 +83,6 @@ const handlePaymentFailed = async (invoice) => {
     .set({ ...decision, updatedAt: new Date() })
     .where(eq(membershipSubscriptions._id, sub._id))
     .returning();
-  recordAgentEvent('membership-billing-agent', 'deterministic', decision.status === 'suspended' || decision.status === 'cancelled');
 
   if (decision.status === 'cancelled') {
     if (sub.stripeSubscriptionId && isStripeConfigured()) {
@@ -90,15 +114,6 @@ const handlePaymentSucceeded = async (invoice) => {
       updatedAt: new Date(),
     })
     .where(eq(membershipSubscriptions._id, sub._id));
-
-  // Auto-posting rule (05-finance/accounting.md) — posted here rather than on
-  // checkout.session.completed above so a brand-new subscription's first charge is only
-  // posted once: Stripe fires invoice.payment_succeeded for that first invoice too, and this
-  // event carries the actual amount charged (invoice.amount_paid), not just the plan's
-  // sticker price — accurate through proration, coupons, etc.
-  postMembershipCharge(sub, invoice.amount_paid / 100, `Membership charge (invoice ${invoice.id})`).catch((err) =>
-    console.error('[ledger] membership charge post failed:', err.message)
-  );
 };
 
 const handleSubscriptionDeleted = async (stripeSubscription) => {

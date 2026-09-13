@@ -1,12 +1,10 @@
 const asyncHandler = require('express-async-handler');
-const { eq, desc, and, gte, lte, sql, count, inArray, ilike } = require('drizzle-orm');
+const { eq, desc, and, gte, lte, sql, count, inArray, like } = require('drizzle-orm');
 const { db } = require('../config/db');
 const { washOrders, customers, vehicles, washPackages, serviceBays, users, customerMessages } = require('../db/schema');
 const { notifyRoles } = require('../utils/notify');
 const { findOpenBay } = require('../utils/bays');
 const { notifyReadyForPickup, checkQueueWaitAlert } = require('../utils/automations');
-const { newCustomerWelcomeDayZero, creditReferralIfFirstWash } = require('../utils/growthAutomations');
-const { postWashOrderCheckout } = require('../services/ledgerService');
 
 // wash-a-vehicle state machine (carwash-compile/01-foundation/data-model.md), kebab-cased
 // to match this app's convention: Queued=queued, BayAssigned=bay-assigned, InWash=in-wash,
@@ -22,7 +20,7 @@ const generateOrderNumber = async () => {
   const [{ total }] = await db
     .select({ total: count() })
     .from(washOrders)
-    .where(ilike(washOrders.orderNumber, `${prefix}%`));
+    .where(like(washOrders.orderNumber, `${prefix}%`));
   return `${prefix}-${String(Number(total) + 1).padStart(3, '0')}`;
 };
 
@@ -360,10 +358,7 @@ const checkout = asyncHandler(async (req, res) => {
   await db.update(vehicles).set({ lastWashAt: new Date(), updatedAt: new Date() }).where(eq(vehicles._id, order.vehicle));
 
   if (order.customer) {
-    const [customerBefore] = await db.select().from(customers).where(eq(customers._id, order.customer));
-    const isFirstEverWash = customerBefore?.visitCount === 0;
-
-    const [updatedCustomer] = await db
+    await db
       .update(customers)
       .set({
         totalSpent: sql`${customers.totalSpent} + ${order.price}`,
@@ -373,13 +368,6 @@ const checkout = asyncHandler(async (req, res) => {
       })
       .where(eq(customers._id, order.customer))
       .returning();
-
-    // new-customer-welcome day 0 + referral crediting (04-growth/marketing.md) — both key
-    // off this being the customer's first-ever completed wash.
-    if (isFirstEverWash && updatedCustomer) {
-      newCustomerWelcomeDayZero(updatedCustomer, order).catch((err) => console.error('[growth] new-customer-welcome failed:', err.message));
-      creditReferralIfFirstWash(updatedCustomer).catch((err) => console.error('[growth] referral credit failed:', err.message));
-    }
   }
 
   notifyRoles(
@@ -391,12 +379,6 @@ const checkout = asyncHandler(async (req, res) => {
     },
     req.user._id
   ).catch(() => {});
-
-  // Auto-posting rule (05-finance/accounting.md) — checkout is the spec's own first example
-  // of a workflow step that moves money.
-  postWashOrderCheckout({ ...order, paymentMethod: paymentMethod || order.paymentMethod }).catch((err) =>
-    console.error('[ledger] wash order checkout post failed:', err.message)
-  );
 
   await respondUpdated(res, order._id);
 });

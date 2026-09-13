@@ -8,13 +8,12 @@ const {
   receivePO,
   closePO,
 } = require('../controllers/purchaseOrderController');
-const { getForecast, runForecast } = require('../controllers/inventoryForecastController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
 // Inventory data (03-operations/inventory.md) — admin/manager only, matching this app's
-// existing gate on Expenses/Finance/HR.
+// existing gate on Expenses/Finance/HR. The AI stock-forecast endpoints were cut.
 router.use(protect, authorize('admin', 'manager'));
 
 router.route('/supplies').get(getSupplies).post(createSupply);
@@ -27,8 +26,5 @@ router.get('/purchase-orders/:id', getPurchaseOrder);
 router.patch('/purchase-orders/:id/approve', approvePurchaseOrder);
 router.patch('/purchase-orders/:id/receive', receivePO);
 router.patch('/purchase-orders/:id/close', closePO);
-
-router.get('/forecast', getForecast);
-router.post('/forecast/run', runForecast);
 
 module.exports = router;

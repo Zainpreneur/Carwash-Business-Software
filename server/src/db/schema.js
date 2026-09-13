@@ -1,60 +1,80 @@
+const { randomUUID } = require('crypto');
 const {
-  pgTable,
-  uuid,
+  sqliteTable,
   text,
   integer,
-  boolean,
-  doublePrecision,
-  timestamp,
-  jsonb,
-} = require('drizzle-orm/pg-core');
+  real,
+  customType,
+} = require('drizzle-orm/sqlite-core');
 
-const users = pgTable('users', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+// UUID text primary key — libSQL/SQLite has no native uuid type, so IDs are generated
+// client-side (crypto.randomUUID) instead of by the server (PG's uuid defaultRandom()).
+const uid = (name) =>
+  text(name)
+    .primaryKey()
+    .$defaultFn(() => randomUUID());
+
+// SQLite has no boolean column; store as INTEGER 0/1 mapped to/from JS booleans.
+const bool = (name, config = {}) => integer(name, { mode: 'boolean', ...config });
+
+// SQLite has no timestamptz; store as INTEGER milliseconds since epoch, mapped to Date.
+const timestampMs = (name, config = {}) => integer(name, { mode: 'timestamp_ms', ...config });
+
+// SQLite has no jsonb; store as TEXT and serialize/deserialize at the column boundary.
+const json = (name) =>
+  customType({
+    dataType: () => 'text',
+    toDriver: (value) =>
+      value === null || value === undefined ? null : JSON.stringify(value),
+    fromDriver: (value) =>
+      value === null || value === undefined ? null : typeof value === 'string' ? JSON.parse(value) : value,
+  })(name);
+
+const users = sqliteTable('users', {
+  _id: uid('_id'),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   password: text('password').notNull(),
   role: text('role').notNull().default('staff'),
   phone: text('phone'),
-  active: boolean('active').notNull().default(true),
+  active: bool('active').notNull().default(true),
   avatarColor: text('avatar_color').notNull().default('#2563eb'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-const customers = pgTable('customers', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+const customers = sqliteTable('customers', {
+  _id: uid('_id'),
   name: text('name').notNull(),
   email: text('email'),
   phone: text('phone').notNull(),
   address: text('address'),
   notes: text('notes'),
   loyaltyPoints: integer('loyalty_points').notNull().default(0),
-  totalSpent: doublePrecision('total_spent').notNull().default(0),
+  totalSpent: real('total_spent').notNull().default(0),
   visitCount: integer('visit_count').notNull().default(0),
-  active: boolean('active').notNull().default(true),
+  active: bool('active').notNull().default(true),
   // gates transactional WhatsApp messaging (carwash-compile/01-foundation/data-model.md);
   // used by the notify-ready-for-pickup automation.
-  whatsappOptIn: boolean('whatsapp_opt_in').notNull().default(true),
+  whatsappOptIn: bool('whatsapp_opt_in').notNull().default(true),
   // set once a Stripe Customer exists for this customer (membership billing only —
   // never created for a plain pay-per-wash visit).
   stripeCustomerId: text('stripe_customer_id'),
-  // fleet-lead-scorer's own segment key (04-growth/marketing.md's "Fleet/Commercial"
-  // segment) — set manually by staff, or automatically once a fleet inquiry scores high
-  // enough (see fleetInquiries below); no automatic detection from wash volume alone.
-  isFleetAccount: boolean('is_fleet_account').notNull().default(false),
+  // fleet-lead segment key (04-growth/marketing.md's "Fleet/Commercial" segment) — set
+  // manually by staff; no automatic detection from wash volume alone.
+  isFleetAccount: bool('is_fleet_account').notNull().default(false),
   // Referral program (04-growth/marketing.md): every customer gets a stable referralCode
   // once generated; referredByCode records whose code got them in the door, checked once
   // against washOrderController.checkout's first-completed-order crediting logic.
   referralCode: text('referral_code').unique(),
   referredByCode: text('referred_by_code'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-const vehicles = pgTable('vehicles', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  customer: uuid('customer_id')
+const vehicles = sqliteTable('vehicles', {
+  _id: uid('_id'),
+  customer: text('customer_id')
     .notNull()
     .references(() => customers._id, { onDelete: 'cascade' }),
   make: text('make').notNull(),
@@ -63,81 +83,81 @@ const vehicles = pgTable('vehicles', {
   color: text('color'),
   plateNumber: text('plate_number').notNull(),
   type: text('type').notNull().default('sedan'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-const services = pgTable('services', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+const services = sqliteTable('services', {
+  _id: uid('_id'),
   name: text('name').notNull(),
   description: text('description'),
   category: text('category').notNull().default('basic'),
-  price: doublePrecision('price').notNull(),
+  price: real('price').notNull(),
   durationMinutes: integer('duration_minutes').notNull().default(30),
-  vehicleTypePricing: jsonb('vehicle_type_pricing'),
-  active: boolean('active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  vehicleTypePricing: json('vehicle_type_pricing'),
+  active: bool('active').notNull().default(true),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-const bookings = pgTable('bookings', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+const bookings = sqliteTable('bookings', {
+  _id: uid('_id'),
   bookingNumber: text('booking_number').notNull().unique(),
-  customer: uuid('customer_id')
+  customer: text('customer_id')
     .notNull()
     .references(() => customers._id, { onDelete: 'cascade' }),
-  vehicle: uuid('vehicle_id')
+  vehicle: text('vehicle_id')
     .notNull()
     .references(() => vehicles._id, { onDelete: 'cascade' }),
-  assignedStaff: uuid('assigned_staff_id').references(() => users._id, { onDelete: 'set null' }),
-  scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+  assignedStaff: text('assigned_staff_id').references(() => users._id, { onDelete: 'set null' }),
+  scheduledAt: timestampMs('scheduled_at').notNull(),
   status: text('status').notNull().default('pending'),
   priority: text('priority').notNull().default('normal'),
-  subtotal: doublePrecision('subtotal').notNull().default(0),
-  discount: doublePrecision('discount').notNull().default(0),
-  tax: doublePrecision('tax').notNull().default(0),
-  total: doublePrecision('total').notNull().default(0),
+  subtotal: real('subtotal').notNull().default(0),
+  discount: real('discount').notNull().default(0),
+  tax: real('tax').notNull().default(0),
+  total: real('total').notNull().default(0),
   paymentStatus: text('payment_status').notNull().default('unpaid'),
   paymentMethod: text('payment_method').notNull().default('cash'),
   notes: text('notes'),
-  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdBy: text('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-const bookingServices = pgTable('booking_services', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  booking: uuid('booking_id')
+const bookingServices = sqliteTable('booking_services', {
+  _id: uid('_id'),
+  booking: text('booking_id')
     .notNull()
     .references(() => bookings._id, { onDelete: 'cascade' }),
-  service: uuid('service_id').references(() => services._id, { onDelete: 'set null' }),
+  service: text('service_id').references(() => services._id, { onDelete: 'set null' }),
   name: text('name').notNull(),
-  price: doublePrecision('price').notNull(),
+  price: real('price').notNull(),
   position: integer('position').notNull().default(0),
 });
 
-const expenses = pgTable('expenses', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+const expenses = sqliteTable('expenses', {
+  _id: uid('_id'),
   category: text('category').notNull(),
   description: text('description').notNull(),
-  amount: doublePrecision('amount').notNull(),
-  date: timestamp('date', { withTimezone: true }).notNull().defaultNow(),
-  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  amount: real('amount').notNull(),
+  date: timestampMs('date').notNull().$defaultFn(() => new Date()),
+  createdBy: text('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-const notifications = pgTable('notifications', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  user: uuid('user_id')
+const notifications = sqliteTable('notifications', {
+  _id: uid('_id'),
+  user: text('user_id')
     .notNull()
     .references(() => users._id, { onDelete: 'cascade' }),
-  booking: uuid('booking_id').references(() => bookings._id, { onDelete: 'cascade' }),
+  booking: text('booking_id').references(() => bookings._id, { onDelete: 'cascade' }),
   type: text('type').notNull().default('info'),
   title: text('title').notNull(),
   message: text('message').notNull(),
-  read: boolean('read').notNull().default(false),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  read: bool('read').notNull().default(false),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
 });
 
 // --- SplashPoint wash-floor module (compiled spec, Phase 1: WashOrder/Vehicle/Customer/
@@ -145,42 +165,42 @@ const notifications = pgTable('notifications', {
 // Statuses/enums are lower-kebab-case to match this app's existing convention; they map
 // 1:1 to the spec's PascalCase state names (e.g. "bay-assigned" = BayAssigned).
 
-const washPackages = pgTable('wash_packages', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+const washPackages = sqliteTable('wash_packages', {
+  _id: uid('_id'),
   // tier: express-exterior | exterior-plus | signature-full-service | premium-hand-detail
   tier: text('tier').notNull(),
   name: text('name').notNull(),
   // deliveryLane: tunnel | detail-bay — which lane type this package runs in
   deliveryLane: text('delivery_lane').notNull().default('tunnel'),
-  includesInterior: boolean('includes_interior').notNull().default(false),
+  includesInterior: bool('includes_interior').notNull().default(false),
   avgCycleTimeMinutes: integer('avg_cycle_time_minutes').notNull().default(15),
-  active: boolean('active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  active: bool('active').notNull().default(true),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
 // PackagePricing join entity: a package's price varies by 3-tier vehicle size
 // (sedan-coupe | suv-truck | van-oversized — motorcycles/oversized rigs are quoted
 // manually per the spec's assumptions, so they have no row here).
-const packagePricing = pgTable('package_pricing', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  package: uuid('package_id')
+const packagePricing = sqliteTable('package_pricing', {
+  _id: uid('_id'),
+  package: text('package_id')
     .notNull()
     .references(() => washPackages._id, { onDelete: 'cascade' }),
   vehicleType: text('vehicle_type').notNull(),
-  price: doublePrecision('price').notNull(),
+  price: real('price').notNull(),
 });
 
-const serviceBays = pgTable('service_bays', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+const serviceBays = sqliteTable('service_bays', {
+  _id: uid('_id'),
   bayNumber: integer('bay_number').notNull().unique(),
   // bayType: tunnel-conveyor | detail-bay
   bayType: text('bay_type').notNull().default('tunnel-conveyor'),
   // operationalStatus: operational | degraded | down | retired
   operationalStatus: text('operational_status').notNull().default('operational'),
-  avgThroughputPerHour: doublePrecision('avg_throughput_per_hour'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  avgThroughputPerHour: real('avg_throughput_per_hour'),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
 // WashOrder: the primary lifecycle entity — a vehicle's trip through the wash.
@@ -188,38 +208,38 @@ const serviceBays = pgTable('service_bays', {
 //   queued -> bay-assigned -> in-wash -> quality-check -> ready-for-pickup -> completed
 //   quality-check -> in-wash (qc failed, rework)
 //   queued | bay-assigned -> cancelled
-const washOrders = pgTable('wash_orders', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+const washOrders = sqliteTable('wash_orders', {
+  _id: uid('_id'),
   orderNumber: text('order_number').notNull().unique(),
   // nullable — anonymous walk-in cash wash is allowed per the spec
-  customer: uuid('customer_id').references(() => customers._id, { onDelete: 'set null' }),
-  vehicle: uuid('vehicle_id')
+  customer: text('customer_id').references(() => customers._id, { onDelete: 'set null' }),
+  vehicle: text('vehicle_id')
     .notNull()
     .references(() => vehicles._id, { onDelete: 'cascade' }),
-  package: uuid('package_id')
+  package: text('package_id')
     .notNull()
     .references(() => washPackages._id, { onDelete: 'restrict' }),
-  bay: uuid('bay_id').references(() => serviceBays._id, { onDelete: 'set null' }),
-  assignedTechnician: uuid('assigned_technician_id').references(() => users._id, { onDelete: 'set null' }),
+  bay: text('bay_id').references(() => serviceBays._id, { onDelete: 'set null' }),
+  assignedTechnician: text('assigned_technician_id').references(() => users._id, { onDelete: 'set null' }),
   // bookingType: walk-in | appointment
   bookingType: text('booking_type').notNull().default('walk-in'),
-  scheduledFor: timestamp('scheduled_for', { withTimezone: true }),
+  scheduledFor: timestampMs('scheduled_for'),
   queuePosition: integer('queue_position'),
-  queuedAt: timestamp('queued_at', { withTimezone: true }).notNull().defaultNow(),
-  bayAssignedAt: timestamp('bay_assigned_at', { withTimezone: true }),
-  washStartedAt: timestamp('wash_started_at', { withTimezone: true }),
-  washCompletedAt: timestamp('wash_completed_at', { withTimezone: true }),
-  checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
+  queuedAt: timestampMs('queued_at').notNull().$defaultFn(() => new Date()),
+  bayAssignedAt: timestampMs('bay_assigned_at'),
+  washStartedAt: timestampMs('wash_started_at'),
+  washCompletedAt: timestampMs('wash_completed_at'),
+  checkedOutAt: timestampMs('checked_out_at'),
   status: text('status').notNull().default('queued'),
   // qcResult: pass | fail — set by a human technician only
   qcResult: text('qc_result'),
-  price: doublePrecision('price').notNull(),
+  price: real('price').notNull(),
   // paymentMethod: membership | card | cash | fleet-invoice
   paymentMethod: text('payment_method').notNull().default('cash'),
   promoCode: text('promo_code'),
-  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdBy: text('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
 // Outbound customer message log (03-operations/automations.md). Sends for real through the
@@ -227,18 +247,18 @@ const washOrders = pgTable('wash_orders', {
 // utils/whatsapp.js) — status records the outcome (sent/failed); stays 'not_configured'
 // otherwise. Either way, this is the audit trail: which automation decided to message a
 // customer, with what template, and what happened.
-const customerMessages = pgTable('customer_messages', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  customer: uuid('customer_id')
+const customerMessages = sqliteTable('customer_messages', {
+  _id: uid('_id'),
+  customer: text('customer_id')
     .notNull()
     .references(() => customers._id, { onDelete: 'cascade' }),
-  washOrder: uuid('wash_order_id').references(() => washOrders._id, { onDelete: 'set null' }),
+  washOrder: text('wash_order_id').references(() => washOrders._id, { onDelete: 'set null' }),
   channel: text('channel').notNull().default('whatsapp'),
   template: text('template').notNull(),
   automation: text('automation').notNull(),
   status: text('status').notNull().default('queued'),
   error: text('error'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
 });
 
 // --- Membership billing (carwash-compile/01-foundation/data-model.md "Membership" +
@@ -250,44 +270,44 @@ const customerMessages = pgTable('customer_messages', {
 // business integrating its own account directly, so a secret-key integration is the
 // correct simplification, not Connect.
 
-const membershipPlans = pgTable('membership_plans', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+const membershipPlans = sqliteTable('membership_plans', {
+  _id: uid('_id'),
   // tier: basic-unlimited | premium-unlimited | fleet-unlimited
   tier: text('tier').notNull(),
   name: text('name').notNull(),
-  coveredPackage: uuid('covered_package_id')
+  coveredPackage: text('covered_package_id')
     .notNull()
     .references(() => washPackages._id, { onDelete: 'restrict' }),
-  monthlyPrice: doublePrecision('monthly_price').notNull(),
-  isUnlimited: boolean('is_unlimited').notNull().default(true),
+  monthlyPrice: real('monthly_price').notNull(),
+  isUnlimited: bool('is_unlimited').notNull().default(true),
   washesPerMonthCap: integer('washes_per_month_cap'),
-  rolloverAllowed: boolean('rollover_allowed').notNull().default(false),
+  rolloverAllowed: bool('rollover_allowed').notNull().default(false),
   // set once this plan has been synced to Stripe as a Product+Price (see membershipController).
   stripePriceId: text('stripe_price_id'),
-  active: boolean('active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  active: bool('active').notNull().default(true),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
 // State machine (terminal: cancelled): active -> past-due (billing-charge-failed) ->
 // suspended (7 days unresolved) -> cancelled (30 days unresolved) | active (paid manually);
 // active <-> paused (customer-requested); active -> cancelled (customer-cancelled).
-const membershipSubscriptions = pgTable('membership_subscriptions', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  customer: uuid('customer_id')
+const membershipSubscriptions = sqliteTable('membership_subscriptions', {
+  _id: uid('_id'),
+  customer: text('customer_id')
     .notNull()
     .references(() => customers._id, { onDelete: 'cascade' }),
   // plate-linked, one active-at-a-time — enforced in membershipController, not a DB
   // constraint (a vehicle may have a past cancelled subscription on record).
-  vehicle: uuid('vehicle_id')
+  vehicle: text('vehicle_id')
     .notNull()
     .references(() => vehicles._id, { onDelete: 'cascade' }),
-  plan: uuid('plan_id')
+  plan: text('plan_id')
     .notNull()
     .references(() => membershipPlans._id, { onDelete: 'restrict' }),
   billingDayOfMonth: integer('billing_day_of_month').notNull(),
-  nextBillingDate: timestamp('next_billing_date', { withTimezone: true }),
-  pausedUntil: timestamp('paused_until', { withTimezone: true }),
+  nextBillingDate: timestampMs('next_billing_date'),
+  pausedUntil: timestampMs('paused_until'),
   washesThisCycle: integer('washes_this_cycle').notNull().default(0),
   failedPaymentAttempts: integer('failed_payment_attempts').notNull().default(0),
   // Set the moment a subscription first goes past-due; cleared on any return to active.
@@ -295,27 +315,11 @@ const membershipSubscriptions = pgTable('membership_subscriptions', {
   // unresolved" clauses of the state machine above — this app has no scheduler to walk the
   // calendar and check every subscription proactively, so the clock only advances on each
   // new payment-failed event the real Stripe account sends, not silently in the background.
-  firstFailedAt: timestamp('first_failed_at', { withTimezone: true }),
+  firstFailedAt: timestampMs('first_failed_at'),
   status: text('status').notNull().default('active'),
   stripeSubscriptionId: text('stripe_subscription_id'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-// wash-concierge's per-customer conversation memory (02-intelligence/ai-agents.md: "per-
-// customer conversation history retained 90 days, so a repeat question isn't answered from
-// scratch"). Keyed by phone rather than requiring a matched Customer row — an inbound
-// WhatsApp message may come from a number not yet on file.
-const agentConversations = pgTable('agent_conversations', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  phone: text('phone').notNull(),
-  customer: uuid('customer_id').references(() => customers._id, { onDelete: 'set null' }),
-  // role: user | assistant
-  role: text('role').notNull(),
-  content: text('content').notNull(),
-  // which tool(s) this turn invoked, if any — audit trail for what the agent actually did.
-  toolCalls: jsonb('tool_calls'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
 // --- Support/CRM (carwash-compile/04-growth/crm.md, data-model.md's Ticket entity). No
@@ -329,102 +333,52 @@ const agentConversations = pgTable('agent_conversations', {
 // the spec's "during operating hours" business-hours-aware version — a documented
 // simplification; there's no scheduler yet (see automations.js) to proactively alert before
 // a breach, so risk is computed on every read instead of pushed ahead of time.
-const tickets = pgTable('tickets', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  customer: uuid('customer_id')
+const tickets = sqliteTable('tickets', {
+  _id: uid('_id'),
+  customer: text('customer_id')
     .notNull()
     .references(() => customers._id, { onDelete: 'cascade' }),
-  washOrder: uuid('wash_order_id').references(() => washOrders._id, { onDelete: 'set null' }),
+  washOrder: text('wash_order_id').references(() => washOrders._id, { onDelete: 'set null' }),
   subject: text('subject').notNull(),
   // category: damage-claim | billing-dispute | quality-complaint | membership-question | general
   category: text('category').notNull().default('general'),
   priority: text('priority').notNull().default('normal'), // low | normal | high | urgent
   status: text('status').notNull().default('open'),
   description: text('description'),
-  assignedTo: uuid('assigned_to_id').references(() => users._id, { onDelete: 'set null' }),
+  assignedTo: text('assigned_to_id').references(() => users._id, { onDelete: 'set null' }),
   // source: whatsapp | phone | google-business-profile | in-app — supportChannels in crm.md
   source: text('source').notNull().default('in-app'),
-  firstRespondedAt: timestamp('first_responded_at', { withTimezone: true }),
-  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
-  closedAt: timestamp('closed_at', { withTimezone: true }),
-  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  firstRespondedAt: timestampMs('first_responded_at'),
+  resolvedAt: timestampMs('resolved_at'),
+  closedAt: timestampMs('closed_at'),
+  createdBy: text('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-// Internal staff-facing update thread on a ticket. The actual customer-facing conversation
-// for a WhatsApp-originated ticket lives in agent_conversations / the real WhatsApp thread —
-// this is staff notes and status-change log, not a unified omni-channel thread (documented
-// gap, see README).
-const ticketComments = pgTable('ticket_comments', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  ticket: uuid('ticket_id')
+// Internal staff-facing update thread on a ticket. This is staff notes and status-change
+// log, not a unified omni-channel thread (documented gap, see README).
+const ticketComments = sqliteTable('ticket_comments', {
+  _id: uid('_id'),
+  ticket: text('ticket_id')
     .notNull()
     .references(() => tickets._id, { onDelete: 'cascade' }),
-  author: uuid('author_id').references(() => users._id, { onDelete: 'set null' }),
-  // authorType: staff | system — system for auto-logged state changes (e.g. "escalated by wash-concierge")
+  author: text('author_id').references(() => users._id, { onDelete: 'set null' }),
+  // authorType: staff | system — system for auto-logged state changes
   authorType: text('author_type').notNull().default('staff'),
   body: text('body').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
 });
 
-// --- Finance & accounting ledger (carwash-compile/05-finance/accounting.md). "A native
-// ledger, sized for a single-location business (21 accounts) but real double-entry
-// throughout - every dollar in the P&L traces to a JournalEntry referencing the WashOrder,
-// MembershipSubscription, or [Expense] that generated it." Scoped to the spec's own
-// auto-posting triggers that this app actually has a workflow for: WashOrder checkout and a
-// successful membership charge, plus this app's pre-existing Expense entity (not in the
-// spec, but the natural expense side of the same ledger). Payroll (below) also posts here
-// now. So does receiving a PurchaseOrder and posting a stock write-off (inventoryService.js,
-// below). Not built: refunds (this app's cancel-wash-order flow only allows cancelling
-// before payment is ever collected, so there is no charge to reverse).
-//
-// Accounts are keyed by the spec's own numeric code (a stable natural key, not a surrogate
-// uuid) since the chart of accounts is a small, seeded, effectively-static reference table.
-const ledgerAccounts = pgTable('ledger_accounts', {
-  code: text('code').primaryKey(),
-  name: text('name').notNull(),
-  // type: asset | liability | equity | revenue | expense
-  type: text('type').notNull(),
-  active: boolean('active').notNull().default(true),
-});
-
-// One JournalEntry per real-world transaction; its JournalLines must balance (sum(debit) ===
-// sum(credit)) — enforced in ledgerService.postEntry, the only way entries get created.
-// sourceEntity/sourceId link back to whatever business event generated it (the spec's own
-// "every JournalEntry carries sourceEntity/sourceId back to the transaction that created
-// it"), but isn't a DB foreign key — the three source tables don't share a namespace.
-const journalEntries = pgTable('journal_entries', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  memo: text('memo').notNull(),
-  // sourceEntity: wash_order | membership_subscription | expense | payroll_run |
-  // purchase_order | stock_adjustment
-  sourceEntity: text('source_entity').notNull(),
-  sourceId: uuid('source_id'),
-  postedAt: timestamp('posted_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-const journalLines = pgTable('journal_lines', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  entry: uuid('entry_id')
-    .notNull()
-    .references(() => journalEntries._id, { onDelete: 'cascade' }),
-  account: text('account_code')
-    .notNull()
-    .references(() => ledgerAccounts.code, { onDelete: 'restrict' }),
-  debit: doublePrecision('debit').notNull().default(0),
-  credit: doublePrecision('credit').notNull().default(0),
-});
-
-// --- HR & payroll (carwash-compile/03-operations/hr.md). "A real staff roster for a 6-bay
+// --- HR (carwash-compile/03-operations/hr.md). "A real staff roster for a 6-bay
 // site: bay-attendants, wash-technicians, detail-technicians, cashiers, a site-manager, and
 // a part-time fleet-account-manager." Employee is explicitly distinct from the login/RBAC
 // `role` on `users` (see the spec's own note); `employees.user` links the two but is
 // nullable — an Employee record can exist (e.g. an Applicant not yet given a login) without
 // a `users` row, and vice versa (an admin login with no HR record).
-const employees = pgTable('employees', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  user: uuid('user_id').references(() => users._id, { onDelete: 'set null' }),
+const employees = sqliteTable('employees', {
+  _id: uid('_id'),
+  user: text('user_id').references(() => users._id, { onDelete: 'set null' }),
   name: text('name').notNull(),
   phone: text('phone'),
   email: text('email'),
@@ -434,18 +388,18 @@ const employees = pgTable('employees', {
   // status: applicant | hired | onboarding | active | on-leave | offboarded (the spec's
   // own Employee lifecycle).
   status: text('status').notNull().default('active'),
-  hireDate: timestamp('hire_date', { withTimezone: true }),
+  hireDate: timestampMs('hire_date'),
   // Exactly one of hourlyRate/annualSalary is set, matching the spec's compensation table:
   // bay-attendant/wash-technician/cashier/fleet-account-manager are hourly, site-manager is
   // salaried. commissionRate is detail-technician only (10% of PackagePricing.price on
   // completed detail-bay WashOrders, per the spec's own commission basis).
-  hourlyRate: doublePrecision('hourly_rate'),
-  annualSalary: doublePrecision('annual_salary'),
-  commissionRate: doublePrecision('commission_rate'),
+  hourlyRate: real('hourly_rate'),
+  annualSalary: real('annual_salary'),
+  commissionRate: real('commission_rate'),
   emergencyContactName: text('emergency_contact_name'),
   emergencyContactPhone: text('emergency_contact_phone'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
 // schedulingEntity: Shift (employeeId x time window x optional bayId), per the spec.
@@ -453,20 +407,20 @@ const employees = pgTable('employees', {
 // automation needs *something* to detect a no-show against, and this app has no clock-in
 // hardware/kiosk, so a staff member (or the employee via a future self-service view, not
 // built) marks it here instead.
-const shifts = pgTable('shifts', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  employee: uuid('employee_id')
+const shifts = sqliteTable('shifts', {
+  _id: uid('_id'),
+  employee: text('employee_id')
     .notNull()
     .references(() => employees._id, { onDelete: 'cascade' }),
-  bay: uuid('bay_id').references(() => serviceBays._id, { onDelete: 'set null' }),
-  startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
-  endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+  bay: text('bay_id').references(() => serviceBays._id, { onDelete: 'set null' }),
+  startsAt: timestampMs('starts_at').notNull(),
+  endsAt: timestampMs('ends_at').notNull(),
   // status: scheduled | completed | no-show | cancelled
   status: text('status').notNull().default('scheduled'),
-  checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
-  checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  checkedInAt: timestampMs('checked_in_at'),
+  checkedOutAt: timestampMs('checked_out_at'),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
 // Leave management: "request -> site-manager approval -> calendar block ... so Shift
@@ -476,50 +430,19 @@ const shifts = pgTable('shifts', {
 // for this app's own UI, without a real calendar. The spec's 10-PTO-days/year monthly
 // accrual math isn't computed here either (documented, not silently assumed) — this is a
 // request/approve workflow only.
-const leaveRequests = pgTable('leave_requests', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  employee: uuid('employee_id')
+const leaveRequests = sqliteTable('leave_requests', {
+  _id: uid('_id'),
+  employee: text('employee_id')
     .notNull()
     .references(() => employees._id, { onDelete: 'cascade' }),
-  startDate: timestamp('start_date', { withTimezone: true }).notNull(),
-  endDate: timestamp('end_date', { withTimezone: true }).notNull(),
+  startDate: timestampMs('start_date').notNull(),
+  endDate: timestampMs('end_date').notNull(),
   reason: text('reason'),
   // status: pending | approved | denied
   status: text('status').notNull().default('pending'),
-  approvedBy: uuid('approved_by_id').references(() => users._id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-// Payroll (05-finance/accounting.md's payrollLinked: true / this file's own pipeline:
-// "sum Shift hours + detail-technician commission ... -> post to 5000 Payroll Expense ->
-// disburse via Stripe -> generate pay-stub documents"). A PayrollRun is computed and posted
-// to the ledger in one shot (payrollService.js) — no draft/review step, and immutable once
-// created, the same posture as a JournalEntry. Not built: real Stripe disbursement (this
-// only posts the accounting entry, it never moves real money) and pay-stub document
-// generation (needs 06-platform/knowledge-base.md's document store, not built).
-const payrollRuns = pgTable('payroll_runs', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
-  periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
-  totalAmount: doublePrecision('total_amount').notNull().default(0),
-  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-const payrollLines = pgTable('payroll_lines', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  payrollRun: uuid('payroll_run_id')
-    .notNull()
-    .references(() => payrollRuns._id, { onDelete: 'cascade' }),
-  employee: uuid('employee_id')
-    .notNull()
-    .references(() => employees._id, { onDelete: 'restrict' }),
-  hoursWorked: doublePrecision('hours_worked').notNull().default(0),
-  hourlyRate: doublePrecision('hourly_rate'),
-  wageAmount: doublePrecision('wage_amount').notNull().default(0),
-  commissionAmount: doublePrecision('commission_amount').notNull().default(0),
-  totalAmount: doublePrecision('total_amount').notNull().default(0),
+  approvedBy: text('approved_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
 // --- Inventory & supply chain (carwash-compile/03-operations/inventory.md). "Chemicals,
@@ -529,191 +452,91 @@ const payrollLines = pgTable('payroll_lines', {
 // single location with `stockTransfers: false` means a separate Stock row per Supply item
 // buys nothing here that a quantityOnHand column doesn't already give — a documented
 // simplification, not a missing feature.
-const suppliers = pgTable('suppliers', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+const suppliers = sqliteTable('suppliers', {
+  _id: uid('_id'),
   name: text('name').notNull(),
   leadTimeDays: integer('lead_time_days').notNull(),
 });
 
-const supplies = pgTable('supplies', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
+const supplies = sqliteTable('supplies', {
+  _id: uid('_id'),
   name: text('name').notNull(),
   // warehouse: main-chemical-room | detail-bay-storage — kept separate per the spec's own
   // reasoning ("a detail-bay stockout doesn't get masked by chemical-room supply").
   warehouse: text('warehouse').notNull().default('main-chemical-room'),
   unit: text('unit').notNull().default('unit'), // e.g. gallon, case, roll
-  quantityOnHand: doublePrecision('quantity_on_hand').notNull().default(0),
-  unitCost: doublePrecision('unit_cost').notNull().default(0),
-  supplier: uuid('supplier_id').references(() => suppliers._id, { onDelete: 'set null' }),
-  active: boolean('active').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  quantityOnHand: real('quantity_on_hand').notNull().default(0),
+  unitCost: real('unit_cost').notNull().default(0),
+  supplier: text('supplier_id').references(() => suppliers._id, { onDelete: 'set null' }),
+  active: bool('active').notNull().default(true),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
 // "Chemical consumption scales with package mix, not just wash count" — how much of a given
-// Supply one wash of a given WashPackage consumes. inventory-forecaster reads trailing
-// WashOrder volume grouped by package against this table rather than a single flat
-// per-vehicle average.
-const packageSupplyUsage = pgTable('package_supply_usage', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  package: uuid('package_id')
+// Supply one wash of a given WashPackage consumes.
+const packageSupplyUsage = sqliteTable('package_supply_usage', {
+  _id: uid('_id'),
+  package: text('package_id')
     .notNull()
     .references(() => washPackages._id, { onDelete: 'cascade' }),
-  supply: uuid('supply_id')
+  supply: text('supply_id')
     .notNull()
     .references(() => supplies._id, { onDelete: 'cascade' }),
-  quantityPerWash: doublePrecision('quantity_per_wash').notNull(),
+  quantityPerWash: real('quantity_per_wash').notNull(),
 });
 
-// State machine: Draft -> Sent -> PartiallyReceived -> Received -> Closed. inventory-
-// forecaster's own recommendations create these directly (auto-sent under $150, Draft
-// above it pending site-manager approval); receiving updates Stock and posts the A/P
-// journal entry (server/src/services/inventoryService.js), matching accounting.payrollLinked's
-// same "share one source of truth" principle.
-const purchaseOrders = pgTable('purchase_orders', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  supplier: uuid('supplier_id')
+// State machine: Draft -> Sent -> PartiallyReceived -> Received -> Closed.
+const purchaseOrders = sqliteTable('purchase_orders', {
+  _id: uid('_id'),
+  supplier: text('supplier_id')
     .notNull()
     .references(() => suppliers._id, { onDelete: 'restrict' }),
   status: text('status').notNull().default('draft'),
-  totalAmount: doublePrecision('total_amount').notNull().default(0),
-  // source: inventory-forecaster | manual — who drafted it, for the /inventory UI to show
-  // "auto-recommended" vs. staff-created purchase orders distinctly.
+  totalAmount: real('total_amount').notNull().default(0),
   source: text('source').notNull().default('manual'),
-  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
-  approvedBy: uuid('approved_by_id').references(() => users._id, { onDelete: 'set null' }),
-  sentAt: timestamp('sent_at', { withTimezone: true }),
-  receivedAt: timestamp('received_at', { withTimezone: true }),
-  closedAt: timestamp('closed_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdBy: text('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  approvedBy: text('approved_by_id').references(() => users._id, { onDelete: 'set null' }),
+  sentAt: timestampMs('sent_at'),
+  receivedAt: timestampMs('received_at'),
+  closedAt: timestampMs('closed_at'),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
+  updatedAt: timestampMs('updated_at').notNull().$defaultFn(() => new Date()),
 });
 
-const purchaseOrderLines = pgTable('purchase_order_lines', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  purchaseOrder: uuid('purchase_order_id')
+const purchaseOrderLines = sqliteTable('purchase_order_lines', {
+  _id: uid('_id'),
+  purchaseOrder: text('purchase_order_id')
     .notNull()
     .references(() => purchaseOrders._id, { onDelete: 'cascade' }),
-  supply: uuid('supply_id')
+  supply: text('supply_id')
     .notNull()
     .references(() => supplies._id, { onDelete: 'restrict' }),
-  quantityOrdered: doublePrecision('quantity_ordered').notNull(),
-  quantityReceived: doublePrecision('quantity_received').notNull().default(0),
-  unitCost: doublePrecision('unit_cost').notNull(),
+  quantityOrdered: real('quantity_ordered').notNull(),
+  quantityReceived: real('quantity_received').notNull().default(0),
+  unitCost: real('unit_cost').notNull(),
 });
 
 // StockAdjustment (shrinkage & write-offs) — "always requiring approvedBy ... same approval
 // discipline as a discount/refund". approvedBy references an Employee (not a bare users
 // row) since the spec explicitly calls out this is an HR-tracked accountability, not just
 // whoever's logged in.
-const stockAdjustments = pgTable('stock_adjustments', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  supply: uuid('supply_id')
+const stockAdjustments = sqliteTable('stock_adjustments', {
+  _id: uid('_id'),
+  supply: text('supply_id')
     .notNull()
     .references(() => supplies._id, { onDelete: 'cascade' }),
   // quantityDelta: negative for a loss (breakage/spillage/theft/expired), positive for a
   // count-correction that found more stock than the system expected.
-  quantityDelta: doublePrecision('quantity_delta').notNull(),
+  quantityDelta: real('quantity_delta').notNull(),
   // reasonCode: breakage | spillage | theft | expired | count-correction
   reasonCode: text('reason_code').notNull(),
   notes: text('notes'),
-  approvedBy: uuid('approved_by_id')
+  approvedBy: text('approved_by_id')
     .notNull()
     .references(() => employees._id, { onDelete: 'restrict' }),
-  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-// --- Orchestrator & advisor agents (02-intelligence/ai-agents.md's "Orchestrator" and
-// "Advisor agents" sections) — the last two clusters of the 12-agent roster this app
-// implements against real entities. `ops-orchestrator` itself makes no Claude call (its own
-// job — "routes work to the right specialist... routing only, no independent transactional
-// authority" — is deterministic aggregation, the same reasoning that kept
-// membership-billing-agent and inventory-forecaster LLM-free); `system-health-agent` needs
-// somewhere to read "the AI workforce's own operating data" from, which nothing in this app
-// logged before now.
-const agentMetrics = pgTable('agent_metrics', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  // agentName: queue-dispatch-agent | wash-concierge | membership-billing-agent |
-  // inventory-forecaster | strategy-advisor
-  agentName: text('agent_name').notNull(),
-  // source: ai-agent | deterministic-fallback (a Claude-capable agent that ran the
-  // fallback path) | deterministic (an agent — membership-billing-agent,
-  // inventory-forecaster — that never calls Claude at all)
-  source: text('source').notNull(),
-  // escalated: only meaningful for wash-concierge (whether escalate_to_human fired this turn)
-  escalated: boolean('escalated').notNull().default(false),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-// strategy-advisor's own "remembers prior recommendations and their stated confidence for
-// 12 months, so it flags rather than silently contradicts an earlier stance." This table
-// *is* that memory — a real row per question asked, not a conversation transcript (advisor
-// questions are one-shot asks, not a back-and-forth chat like wash-concierge's).
-const strategyRecommendations = pgTable('strategy_recommendations', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  question: text('question').notNull(),
-  answer: text('answer').notNull(),
-  // pattern: unit-economics | scenario-comparison | root-cause-5-whys | decision-matrix | none
-  // ("none" when no Claude key is configured and the fallback message is returned instead).
-  pattern: text('pattern').notNull().default('none'),
-  confidencePercent: integer('confidence_percent'),
-  askedBy: uuid('asked_by_id').references(() => users._id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-// --- Growth cluster (04-growth/marketing.md, 04-growth/social-media.md) — the two task
-// agents from the spec's own roster that are buildable against real (if manually-entered)
-// data rather than a live ad-platform or Google Business Profile connector this app has no
-// credentials for. The rest of the growth cluster (paid ad campaigns, A/B testing, the
-// content-calendar/SocialPost publishing pipeline, multi-week lifecycle drip follow-ups —
-// all of which genuinely need a scheduler or a real ad/social API this app doesn't have) is
-// documented as not built rather than faked.
-//
-// fleet-lead-scorer: "scores an inbound commercial/fleet inquiry ... creates a follow-up
-// notification for fleet-account-manager, rather than running a full sales pipeline" (the
-// spec's own reasoning for skipping the pipeline — see 04-growth/crm.md — doesn't apply to
-// this lightweight scorer). Makes NO Claude call: scoring from three stated inputs against
-// stated thresholds is arithmetic, not a judgment call, the same reasoning that kept
-// membership-billing-agent/inventory-forecaster LLM-free.
-const fleetInquiries = pgTable('fleet_inquiries', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  customer: uuid('customer_id').references(() => customers._id, { onDelete: 'set null' }),
-  companyName: text('company_name').notNull(),
-  contactPhone: text('contact_phone'),
-  vehicleCountRequested: integer('vehicle_count_requested').notNull(),
-  // contactPattern: business-hours | after-hours — one of the spec's own stated scoring inputs.
-  contactPattern: text('contact_pattern').notNull().default('business-hours'),
-  invoicingTermsRequested: boolean('invoicing_terms_requested').notNull().default(false),
-  score: integer('score').notNull(),
-  // status: new | followed-up | converted | declined
-  status: text('status').notNull().default('new'),
-  createdBy: uuid('created_by_id').references(() => users._id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-// review-response-agent: "monitors Google Business Profile and social mentions, auto-thanks
-// simple positive reviews with a loyalty-point offer, and opens a Ticket + immediate
-// site-manager alert for anything negative or mentioning damage." The monitoring/detection
-// half isn't built (no Google Business Profile/social API connector) — reviews are logged
-// here manually (by staff, or a future webhook), and the response logic downstream of that
-// is real. Also makes NO Claude call: the guardrail itself is a rating threshold plus a
-// keyword check, not free-form sentiment judgment — deliberately conservative and
-// deterministic rather than trusting an LLM's read of "does this mention damage" for a
-// reputational-risk decision this spec calls out as high-stakes.
-const reviews = pgTable('reviews', {
-  _id: uuid('_id').primaryKey().defaultRandom(),
-  customer: uuid('customer_id').references(() => customers._id, { onDelete: 'set null' }),
-  // source: google-business-profile | instagram | facebook | tiktok | manual
-  source: text('source').notNull().default('manual'),
-  rating: integer('rating').notNull(),
-  text: text('text'),
-  // status: auto-responded | escalated
-  status: text('status').notNull(),
-  response: text('response'),
-  ticket: uuid('ticket_id').references(() => tickets._id, { onDelete: 'set null' }),
-  loggedBy: uuid('logged_by_id').references(() => users._id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdBy: text('created_by_id').references(() => users._id, { onDelete: 'set null' }),
+  createdAt: timestampMs('created_at').notNull().$defaultFn(() => new Date()),
 });
 
 module.exports = {
@@ -732,25 +555,15 @@ module.exports = {
   customerMessages,
   membershipPlans,
   membershipSubscriptions,
-  agentConversations,
   tickets,
   ticketComments,
-  ledgerAccounts,
-  journalEntries,
-  journalLines,
   employees,
   shifts,
   leaveRequests,
-  payrollRuns,
-  payrollLines,
   suppliers,
   supplies,
   packageSupplyUsage,
   purchaseOrders,
   purchaseOrderLines,
   stockAdjustments,
-  agentMetrics,
-  strategyRecommendations,
-  fleetInquiries,
-  reviews,
 };

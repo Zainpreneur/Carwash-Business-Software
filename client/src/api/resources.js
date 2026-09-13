@@ -56,17 +56,6 @@ export const integrationsApi = {
   status: () => apiClient.get('/integrations/status').then((r) => r.data),
 }
 
-export const conciergeApi = {
-  conversations: () => apiClient.get('/concierge/conversations').then((r) => r.data),
-  simulate: (fromPhone, text) => apiClient.post('/concierge/simulate', { fromPhone, text }).then((r) => r.data),
-}
-
-export const ledgerApi = {
-  accounts: () => apiClient.get('/ledger/accounts').then((r) => r.data),
-  entries: (params) => apiClient.get('/ledger/entries', { params }).then((r) => r.data),
-  pnl: (params) => apiClient.get('/ledger/pnl', { params }).then((r) => r.data),
-}
-
 export const hrApi = {
   employees: {
     list: () => apiClient.get('/hr/employees').then((r) => r.data),
@@ -88,11 +77,6 @@ export const hrApi = {
     create: (data) => apiClient.post('/hr/leave-requests', data).then((r) => r.data),
     decide: (id, status) => apiClient.patch(`/hr/leave-requests/${id}/decision`, { status }).then((r) => r.data),
   },
-  payrollRuns: {
-    list: () => apiClient.get('/hr/payroll-runs').then((r) => r.data),
-    get: (id) => apiClient.get(`/hr/payroll-runs/${id}`).then((r) => r.data),
-    create: (data) => apiClient.post('/hr/payroll-runs', data).then((r) => r.data),
-  },
 }
 
 export const inventoryApi = {
@@ -113,40 +97,6 @@ export const inventoryApi = {
     approve: (id) => apiClient.patch(`/inventory/purchase-orders/${id}/approve`).then((r) => r.data),
     receive: (id, receivedLines) => apiClient.patch(`/inventory/purchase-orders/${id}/receive`, { receivedLines }).then((r) => r.data),
     close: (id) => apiClient.patch(`/inventory/purchase-orders/${id}/close`).then((r) => r.data),
-  },
-  forecast: {
-    preview: () => apiClient.get('/inventory/forecast').then((r) => r.data),
-    run: () => apiClient.post('/inventory/forecast/run').then((r) => r.data),
-  },
-}
-
-export const simulationApi = {
-  bayThroughput: () => apiClient.get('/simulations/bay-throughput').then((r) => r.data),
-  demandForecast: () => apiClient.get('/simulations/demand-forecast').then((r) => r.data),
-  staffingCapacity: () => apiClient.get('/simulations/staffing-capacity').then((r) => r.data),
-  membershipEconomics: () => apiClient.get('/simulations/membership-economics').then((r) => r.data),
-  cashFlowForecast: (weeks) => apiClient.get('/simulations/cash-flow-forecast', { params: { weeks } }).then((r) => r.data),
-  pricingScenario: (data) => apiClient.post('/simulations/pricing-scenario', data).then((r) => r.data),
-}
-
-export const agentOpsApi = {
-  orchestratorSnapshot: () => apiClient.get('/agent-ops/orchestrator-snapshot').then((r) => r.data),
-  askStrategyAdvisor: (question) => apiClient.post('/agent-ops/strategy-advisor/ask', { question }).then((r) => r.data),
-  strategyAdvisorHistory: () => apiClient.get('/agent-ops/strategy-advisor/history').then((r) => r.data),
-  systemHealthReport: () => apiClient.get('/agent-ops/system-health-report').then((r) => r.data),
-}
-
-export const growthApi = {
-  segmentSummary: () => apiClient.get('/growth/segments/summary').then((r) => r.data),
-  segmentedCustomers: (segment) => apiClient.get('/growth/segments/customers', { params: { segment } }).then((r) => r.data),
-  fleetInquiries: {
-    list: () => apiClient.get('/growth/fleet-inquiries').then((r) => r.data),
-    create: (data) => apiClient.post('/growth/fleet-inquiries', data).then((r) => r.data),
-    updateStatus: (id, status) => apiClient.patch(`/growth/fleet-inquiries/${id}/status`, { status }).then((r) => r.data),
-  },
-  reviews: {
-    list: () => apiClient.get('/growth/reviews').then((r) => r.data),
-    create: (data) => apiClient.post('/growth/reviews', data).then((r) => r.data),
   },
 }
 

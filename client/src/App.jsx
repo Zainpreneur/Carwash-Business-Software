@@ -9,7 +9,6 @@ import WashQueue from './pages/WashQueue'
 import FloorQueue from './pages/FloorQueue'
 import Checkout from './pages/Checkout'
 import MembershipPlans from './pages/MembershipPlans'
-import Concierge from './pages/Concierge'
 import Tickets from './pages/Tickets'
 import Bookings from './pages/Bookings'
 import Customers from './pages/Customers'
@@ -19,11 +18,7 @@ import Staff from './pages/Staff'
 import HR from './pages/HR'
 import Inventory from './pages/Inventory'
 import Expenses from './pages/Expenses'
-import Finance from './pages/Finance'
 import Reports from './pages/Reports'
-import Simulations from './pages/Simulations'
-import OpsCenter from './pages/OpsCenter'
-import Growth from './pages/Growth'
 import Settings from './pages/Settings'
 import NotFound from './pages/NotFound'
 
@@ -52,16 +47,11 @@ function App() {
             <Route element={<RoleRoute roles={['admin', 'manager']} />}>
               <Route path="/wash-queue" element={<WashQueue />} />
               <Route path="/memberships" element={<MembershipPlans />} />
-              <Route path="/concierge" element={<Concierge />} />
               <Route path="/staff" element={<Staff />} />
               <Route path="/hr" element={<HR />} />
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/expenses" element={<Expenses />} />
-              <Route path="/finance" element={<Finance />} />
               <Route path="/reports" element={<Reports />} />
-              <Route path="/simulations" element={<Simulations />} />
-              <Route path="/ops-center" element={<OpsCenter />} />
-              <Route path="/growth" element={<Growth />} />
             </Route>
           </Route>
         </Route>
