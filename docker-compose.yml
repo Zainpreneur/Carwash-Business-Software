@@ -1,0 +1,69 @@
+# Coolify-ready compose. Deploy as a "Docker Compose" resource, set the env vars
+# in the Coolify UI, then point your domains at `api` (3000) and `web` (80).
+#
+# Database: defaults to Turso Cloud (LIBSQL_URL + LIBSQL_AUTH_TOKEN).
+# To self-host libSQL on this VPS instead, uncomment the `libsql` service and set
+# LIBSQL_URL=http://libsql:8080.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LIBSQL_URL: ${LIBSQL_URL:-file:/data/local.db}
+      LIBSQL_AUTH_TOKEN: ${LIBSQL_AUTH_TOKEN:-}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+    volumes:
+      - libsql_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${PUBLIC_API_URL}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # --- Optional: self-hosted libSQL (skip when using Turso Cloud) -----------
+  # libsql:
+  #   image: ghcr.io/tursodatabase/libsql-server:latest
+  #   environment:
+  #     SQLD_NODE: primary
+  #   volumes:
+  #     - libsql_data:/var/lib/sqld
+  #   ports:
+  #     - "8080:8080"
+  #   restart: unless-stopped
+
+volumes:
+  libsql_data:

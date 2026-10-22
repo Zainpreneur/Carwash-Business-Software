@@ -1,0 +1,4613 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "30728802-0016-4cc2-b5d6-9f23be35624d",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "audit_logs": {
+      "name": "audit_logs",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "entity": {
+          "name": "entity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "meta": {
+          "name": "meta",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ip": {
+          "name": "ip",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_audit_logs_tenant": {
+          "name": "idx_audit_logs_tenant",
+          "columns": ["tenant_id", "created_at"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "audit_logs_tenant_id_tenants__id_fk": {
+          "name": "audit_logs_tenant_id_tenants__id_fk",
+          "tableFrom": "audit_logs",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "audit_logs_user_id_users_id_fk": {
+          "name": "audit_logs_user_id_users_id_fk",
+          "tableFrom": "audit_logs",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "invites": {
+      "name": "invites",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'staff'"
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "invited_by_id": {
+          "name": "invited_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accepted_at": {
+          "name": "accepted_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "accepted_by_id": {
+          "name": "accepted_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "invites_code_unique": {
+          "name": "invites_code_unique",
+          "columns": ["code"],
+          "isUnique": true
+        },
+        "idx_invites_tenant": {
+          "name": "idx_invites_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "invites_tenant_id_tenants__id_fk": {
+          "name": "invites_tenant_id_tenants__id_fk",
+          "tableFrom": "invites",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "invites_location_id_locations__id_fk": {
+          "name": "invites_location_id_locations__id_fk",
+          "tableFrom": "invites",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "invites_invited_by_id_users_id_fk": {
+          "name": "invites_invited_by_id_users_id_fk",
+          "tableFrom": "invites",
+          "tableTo": "users",
+          "columnsFrom": ["invited_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "invites_accepted_by_id_users_id_fk": {
+          "name": "invites_accepted_by_id_users_id_fk",
+          "tableFrom": "invites",
+          "tableTo": "users",
+          "columnsFrom": ["accepted_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "locations": {
+      "name": "locations",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "city": {
+          "name": "city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "country": {
+          "name": "country",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_locations_tenant_code": {
+          "name": "uq_locations_tenant_code",
+          "columns": ["tenant_id", "code"],
+          "isUnique": true
+        },
+        "idx_locations_tenant": {
+          "name": "idx_locations_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "locations_tenant_id_tenants__id_fk": {
+          "name": "locations_tenant_id_tenants__id_fk",
+          "tableFrom": "locations",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "saas_plans": {
+      "name": "saas_plans",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "price_monthly": {
+          "name": "price_monthly",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "max_locations": {
+          "name": "max_locations",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "max_staff": {
+          "name": "max_staff",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 5
+        },
+        "max_customers": {
+          "name": "max_customers",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 500
+        },
+        "features": {
+          "name": "features",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "saas_plans_code_unique": {
+          "name": "saas_plans_code_unique",
+          "columns": ["code"],
+          "isUnique": true
+        },
+        "idx_saas_plans_active": {
+          "name": "idx_saas_plans_active",
+          "columns": ["active"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tenant_domains": {
+      "name": "tenant_domains",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "domain": {
+          "name": "domain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "primary": {
+          "name": "primary",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "verified": {
+          "name": "verified",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tenant_domains_domain_unique": {
+          "name": "tenant_domains_domain_unique",
+          "columns": ["domain"],
+          "isUnique": true
+        },
+        "idx_tenant_domains_tenant": {
+          "name": "idx_tenant_domains_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tenant_domains_tenant_id_tenants__id_fk": {
+          "name": "tenant_domains_tenant_id_tenants__id_fk",
+          "tableFrom": "tenant_domains",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tenant_members": {
+      "name": "tenant_members",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'staff'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "scope_all_locations": {
+          "name": "scope_all_locations",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_tenant_members_tenant_user": {
+          "name": "uq_tenant_members_tenant_user",
+          "columns": ["tenant_id", "user_id"],
+          "isUnique": true
+        },
+        "idx_tenant_members_user": {
+          "name": "idx_tenant_members_user",
+          "columns": ["user_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tenant_members_tenant_id_tenants__id_fk": {
+          "name": "tenant_members_tenant_id_tenants__id_fk",
+          "tableFrom": "tenant_members",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tenant_members_user_id_users_id_fk": {
+          "name": "tenant_members_user_id_users_id_fk",
+          "tableFrom": "tenant_members",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tenant_members_location_id_locations__id_fk": {
+          "name": "tenant_members_location_id_locations__id_fk",
+          "tableFrom": "tenant_members",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tenant_subscriptions": {
+      "name": "tenant_subscriptions",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "plan_code": {
+          "name": "plan_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'starter'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'trialing'"
+        },
+        "seats": {
+          "name": "seats",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "renews_at": {
+          "name": "renews_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "canceled_at": {
+          "name": "canceled_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_tenant_subscriptions_tenant": {
+          "name": "idx_tenant_subscriptions_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tenant_subscriptions_tenant_id_tenants__id_fk": {
+          "name": "tenant_subscriptions_tenant_id_tenants__id_fk",
+          "tableFrom": "tenant_subscriptions",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tenants": {
+      "name": "tenants",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'trial'"
+        },
+        "plan": {
+          "name": "plan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'starter'"
+        },
+        "logo_url": {
+          "name": "logo_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "brand_color": {
+          "name": "brand_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'#0284c7'"
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'USD'"
+        },
+        "timezone": {
+          "name": "timezone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'Asia/Riyadh'"
+        },
+        "tax_rate": {
+          "name": "tax_rate",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "settings": {
+          "name": "settings",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tenants_slug_unique": {
+          "name": "tenants_slug_unique",
+          "columns": ["slug"],
+          "isUnique": true
+        },
+        "idx_tenants_status": {
+          "name": "idx_tenants_status",
+          "columns": ["status"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email_verified": {
+          "name": "email_verified",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "image": {
+          "name": "image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "platform_role": {
+          "name": "platform_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'user'"
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "avatar_color": {
+          "name": "avatar_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'#2563eb'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "columns": ["email"],
+          "isUnique": true
+        },
+        "idx_users_platform_role": {
+          "name": "idx_users_platform_role",
+          "columns": ["platform_role"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "auth_accounts": {
+      "name": "auth_accounts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "access_token": {
+          "name": "access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "refresh_token": {
+          "name": "refresh_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "access_token_expires_at": {
+          "name": "access_token_expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "refresh_token_expires_at": {
+          "name": "refresh_token_expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "id_token": {
+          "name": "id_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "password": {
+          "name": "password",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_auth_accounts_provider": {
+          "name": "uq_auth_accounts_provider",
+          "columns": ["provider_id", "account_id"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "auth_accounts_user_id_users_id_fk": {
+          "name": "auth_accounts_user_id_users_id_fk",
+          "tableFrom": "auth_accounts",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "auth_sessions": {
+      "name": "auth_sessions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ip_address": {
+          "name": "ip_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "auth_sessions_token_unique": {
+          "name": "auth_sessions_token_unique",
+          "columns": ["token"],
+          "isUnique": true
+        },
+        "idx_auth_sessions_user": {
+          "name": "idx_auth_sessions_user",
+          "columns": ["user_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "auth_sessions_user_id_users_id_fk": {
+          "name": "auth_sessions_user_id_users_id_fk",
+          "tableFrom": "auth_sessions",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "auth_verifications": {
+      "name": "auth_verifications",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "identifier": {
+          "name": "identifier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_auth_verifications_identifier": {
+          "name": "idx_auth_verifications_identifier",
+          "columns": ["identifier"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "booking_services": {
+      "name": "booking_services",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "booking_id": {
+          "name": "booking_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "service_id": {
+          "name": "service_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "price": {
+          "name": "price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "idx_booking_services_tenant": {
+          "name": "idx_booking_services_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "booking_services_tenant_id_tenants__id_fk": {
+          "name": "booking_services_tenant_id_tenants__id_fk",
+          "tableFrom": "booking_services",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "booking_services_booking_id_bookings__id_fk": {
+          "name": "booking_services_booking_id_bookings__id_fk",
+          "tableFrom": "booking_services",
+          "tableTo": "bookings",
+          "columnsFrom": ["booking_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "booking_services_service_id_services__id_fk": {
+          "name": "booking_services_service_id_services__id_fk",
+          "tableFrom": "booking_services",
+          "tableTo": "services",
+          "columnsFrom": ["service_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "bookings": {
+      "name": "bookings",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "booking_number": {
+          "name": "booking_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "vehicle_id": {
+          "name": "vehicle_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "assigned_staff_id": {
+          "name": "assigned_staff_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "scheduled_at": {
+          "name": "scheduled_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "priority": {
+          "name": "priority",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'normal'"
+        },
+        "subtotal": {
+          "name": "subtotal",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "discount": {
+          "name": "discount",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "tax": {
+          "name": "tax",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "total": {
+          "name": "total",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "payment_status": {
+          "name": "payment_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unpaid'"
+        },
+        "payment_method": {
+          "name": "payment_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'cash'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_id": {
+          "name": "created_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_bookings_tenant": {
+          "name": "idx_bookings_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        },
+        "idx_bookings_tenant_location": {
+          "name": "idx_bookings_tenant_location",
+          "columns": ["tenant_id", "location_id"],
+          "isUnique": false
+        },
+        "idx_bookings_tenant_scheduled": {
+          "name": "idx_bookings_tenant_scheduled",
+          "columns": ["tenant_id", "scheduled_at"],
+          "isUnique": false
+        },
+        "uq_bookings_tenant_number": {
+          "name": "uq_bookings_tenant_number",
+          "columns": ["tenant_id", "booking_number"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "bookings_tenant_id_tenants__id_fk": {
+          "name": "bookings_tenant_id_tenants__id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "bookings_location_id_locations__id_fk": {
+          "name": "bookings_location_id_locations__id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "bookings_customer_id_customers__id_fk": {
+          "name": "bookings_customer_id_customers__id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "customers",
+          "columnsFrom": ["customer_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "bookings_vehicle_id_vehicles__id_fk": {
+          "name": "bookings_vehicle_id_vehicles__id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "vehicles",
+          "columnsFrom": ["vehicle_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "bookings_assigned_staff_id_users_id_fk": {
+          "name": "bookings_assigned_staff_id_users_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "users",
+          "columnsFrom": ["assigned_staff_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "bookings_created_by_id_users_id_fk": {
+          "name": "bookings_created_by_id_users_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "users",
+          "columnsFrom": ["created_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "customers": {
+      "name": "customers",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "loyalty_points": {
+          "name": "loyalty_points",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "total_spent": {
+          "name": "total_spent",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "visit_count": {
+          "name": "visit_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "whatsapp_opt_in": {
+          "name": "whatsapp_opt_in",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "stripe_customer_id": {
+          "name": "stripe_customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "is_fleet_account": {
+          "name": "is_fleet_account",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "referral_code": {
+          "name": "referral_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "referred_by_code": {
+          "name": "referred_by_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_customers_tenant": {
+          "name": "idx_customers_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        },
+        "uq_customers_tenant_referral": {
+          "name": "uq_customers_tenant_referral",
+          "columns": ["tenant_id", "referral_code"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "customers_tenant_id_tenants__id_fk": {
+          "name": "customers_tenant_id_tenants__id_fk",
+          "tableFrom": "customers",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "expenses": {
+      "name": "expenses",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "date": {
+          "name": "date",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_by_id": {
+          "name": "created_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_expenses_tenant": {
+          "name": "idx_expenses_tenant",
+          "columns": ["tenant_id", "date"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "expenses_tenant_id_tenants__id_fk": {
+          "name": "expenses_tenant_id_tenants__id_fk",
+          "tableFrom": "expenses",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "expenses_location_id_locations__id_fk": {
+          "name": "expenses_location_id_locations__id_fk",
+          "tableFrom": "expenses",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "expenses_created_by_id_users_id_fk": {
+          "name": "expenses_created_by_id_users_id_fk",
+          "tableFrom": "expenses",
+          "tableTo": "users",
+          "columnsFrom": ["created_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "notifications": {
+      "name": "notifications",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "booking_id": {
+          "name": "booking_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'info'"
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "read": {
+          "name": "read",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_notifications_tenant_user": {
+          "name": "idx_notifications_tenant_user",
+          "columns": ["tenant_id", "user_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "notifications_tenant_id_tenants__id_fk": {
+          "name": "notifications_tenant_id_tenants__id_fk",
+          "tableFrom": "notifications",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "notifications_user_id_users_id_fk": {
+          "name": "notifications_user_id_users_id_fk",
+          "tableFrom": "notifications",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "notifications_booking_id_bookings__id_fk": {
+          "name": "notifications_booking_id_bookings__id_fk",
+          "tableFrom": "notifications",
+          "tableTo": "bookings",
+          "columnsFrom": ["booking_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "services": {
+      "name": "services",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'basic'"
+        },
+        "price": {
+          "name": "price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "duration_minutes": {
+          "name": "duration_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 30
+        },
+        "vehicle_type_pricing": {
+          "name": "vehicle_type_pricing",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_services_tenant": {
+          "name": "idx_services_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "services_tenant_id_tenants__id_fk": {
+          "name": "services_tenant_id_tenants__id_fk",
+          "tableFrom": "services",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "vehicles": {
+      "name": "vehicles",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "make": {
+          "name": "make",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "year": {
+          "name": "year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "plate_number": {
+          "name": "plate_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'sedan'"
+        },
+        "last_wash_at": {
+          "name": "last_wash_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_vehicles_tenant": {
+          "name": "idx_vehicles_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        },
+        "idx_vehicles_tenant_plate": {
+          "name": "idx_vehicles_tenant_plate",
+          "columns": ["tenant_id", "plate_number"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "vehicles_tenant_id_tenants__id_fk": {
+          "name": "vehicles_tenant_id_tenants__id_fk",
+          "tableFrom": "vehicles",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "vehicles_customer_id_customers__id_fk": {
+          "name": "vehicles_customer_id_customers__id_fk",
+          "tableFrom": "vehicles",
+          "tableTo": "customers",
+          "columnsFrom": ["customer_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "customer_messages": {
+      "name": "customer_messages",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "wash_order_id": {
+          "name": "wash_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'whatsapp'"
+        },
+        "template": {
+          "name": "template",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "automation": {
+          "name": "automation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'queued'"
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_customer_messages_tenant": {
+          "name": "idx_customer_messages_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "customer_messages_tenant_id_tenants__id_fk": {
+          "name": "customer_messages_tenant_id_tenants__id_fk",
+          "tableFrom": "customer_messages",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "customer_messages_customer_id_customers__id_fk": {
+          "name": "customer_messages_customer_id_customers__id_fk",
+          "tableFrom": "customer_messages",
+          "tableTo": "customers",
+          "columnsFrom": ["customer_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "customer_messages_wash_order_id_wash_orders__id_fk": {
+          "name": "customer_messages_wash_order_id_wash_orders__id_fk",
+          "tableFrom": "customer_messages",
+          "tableTo": "wash_orders",
+          "columnsFrom": ["wash_order_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "package_pricing": {
+      "name": "package_pricing",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "package_id": {
+          "name": "package_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "vehicle_type": {
+          "name": "vehicle_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "price": {
+          "name": "price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_package_pricing_tenant": {
+          "name": "idx_package_pricing_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "package_pricing_tenant_id_tenants__id_fk": {
+          "name": "package_pricing_tenant_id_tenants__id_fk",
+          "tableFrom": "package_pricing",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "package_pricing_package_id_wash_packages__id_fk": {
+          "name": "package_pricing_package_id_wash_packages__id_fk",
+          "tableFrom": "package_pricing",
+          "tableTo": "wash_packages",
+          "columnsFrom": ["package_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "service_bays": {
+      "name": "service_bays",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bay_number": {
+          "name": "bay_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bay_type": {
+          "name": "bay_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'tunnel-conveyor'"
+        },
+        "operational_status": {
+          "name": "operational_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'operational'"
+        },
+        "avg_throughput_per_hour": {
+          "name": "avg_throughput_per_hour",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_service_bays_tenant": {
+          "name": "idx_service_bays_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        },
+        "idx_service_bays_location": {
+          "name": "idx_service_bays_location",
+          "columns": ["location_id"],
+          "isUnique": false
+        },
+        "uq_service_bays_location_number": {
+          "name": "uq_service_bays_location_number",
+          "columns": ["location_id", "bay_number"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "service_bays_tenant_id_tenants__id_fk": {
+          "name": "service_bays_tenant_id_tenants__id_fk",
+          "tableFrom": "service_bays",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "service_bays_location_id_locations__id_fk": {
+          "name": "service_bays_location_id_locations__id_fk",
+          "tableFrom": "service_bays",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "wash_orders": {
+      "name": "wash_orders",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "order_number": {
+          "name": "order_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "vehicle_id": {
+          "name": "vehicle_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "package_id": {
+          "name": "package_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bay_id": {
+          "name": "bay_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "assigned_technician_id": {
+          "name": "assigned_technician_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "booking_type": {
+          "name": "booking_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'walk-in'"
+        },
+        "scheduled_for": {
+          "name": "scheduled_for",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "queue_position": {
+          "name": "queue_position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "queued_at": {
+          "name": "queued_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bay_assigned_at": {
+          "name": "bay_assigned_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "wash_started_at": {
+          "name": "wash_started_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "wash_completed_at": {
+          "name": "wash_completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checked_out_at": {
+          "name": "checked_out_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'queued'"
+        },
+        "qc_result": {
+          "name": "qc_result",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "price": {
+          "name": "price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payment_method": {
+          "name": "payment_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'cash'"
+        },
+        "promo_code": {
+          "name": "promo_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_id": {
+          "name": "created_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_wash_orders_tenant": {
+          "name": "idx_wash_orders_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        },
+        "idx_wash_orders_tenant_location": {
+          "name": "idx_wash_orders_tenant_location",
+          "columns": ["tenant_id", "location_id"],
+          "isUnique": false
+        },
+        "idx_wash_orders_tenant_status": {
+          "name": "idx_wash_orders_tenant_status",
+          "columns": ["tenant_id", "status"],
+          "isUnique": false
+        },
+        "uq_wash_orders_tenant_number": {
+          "name": "uq_wash_orders_tenant_number",
+          "columns": ["tenant_id", "order_number"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "wash_orders_tenant_id_tenants__id_fk": {
+          "name": "wash_orders_tenant_id_tenants__id_fk",
+          "tableFrom": "wash_orders",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "wash_orders_location_id_locations__id_fk": {
+          "name": "wash_orders_location_id_locations__id_fk",
+          "tableFrom": "wash_orders",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "wash_orders_customer_id_customers__id_fk": {
+          "name": "wash_orders_customer_id_customers__id_fk",
+          "tableFrom": "wash_orders",
+          "tableTo": "customers",
+          "columnsFrom": ["customer_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "wash_orders_vehicle_id_vehicles__id_fk": {
+          "name": "wash_orders_vehicle_id_vehicles__id_fk",
+          "tableFrom": "wash_orders",
+          "tableTo": "vehicles",
+          "columnsFrom": ["vehicle_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "wash_orders_package_id_wash_packages__id_fk": {
+          "name": "wash_orders_package_id_wash_packages__id_fk",
+          "tableFrom": "wash_orders",
+          "tableTo": "wash_packages",
+          "columnsFrom": ["package_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "wash_orders_bay_id_service_bays__id_fk": {
+          "name": "wash_orders_bay_id_service_bays__id_fk",
+          "tableFrom": "wash_orders",
+          "tableTo": "service_bays",
+          "columnsFrom": ["bay_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "wash_orders_assigned_technician_id_users_id_fk": {
+          "name": "wash_orders_assigned_technician_id_users_id_fk",
+          "tableFrom": "wash_orders",
+          "tableTo": "users",
+          "columnsFrom": ["assigned_technician_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "wash_orders_created_by_id_users_id_fk": {
+          "name": "wash_orders_created_by_id_users_id_fk",
+          "tableFrom": "wash_orders",
+          "tableTo": "users",
+          "columnsFrom": ["created_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "wash_packages": {
+      "name": "wash_packages",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tier": {
+          "name": "tier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "delivery_lane": {
+          "name": "delivery_lane",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'tunnel'"
+        },
+        "includes_interior": {
+          "name": "includes_interior",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "avg_cycle_time_minutes": {
+          "name": "avg_cycle_time_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 15
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_wash_packages_tenant": {
+          "name": "idx_wash_packages_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "wash_packages_tenant_id_tenants__id_fk": {
+          "name": "wash_packages_tenant_id_tenants__id_fk",
+          "tableFrom": "wash_packages",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "membership_plans": {
+      "name": "membership_plans",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tier": {
+          "name": "tier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "covered_package_id": {
+          "name": "covered_package_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "monthly_price": {
+          "name": "monthly_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_unlimited": {
+          "name": "is_unlimited",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "washes_per_month_cap": {
+          "name": "washes_per_month_cap",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rollover_allowed": {
+          "name": "rollover_allowed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "stripe_price_id": {
+          "name": "stripe_price_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_membership_plans_tenant": {
+          "name": "idx_membership_plans_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "membership_plans_tenant_id_tenants__id_fk": {
+          "name": "membership_plans_tenant_id_tenants__id_fk",
+          "tableFrom": "membership_plans",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "membership_plans_covered_package_id_wash_packages__id_fk": {
+          "name": "membership_plans_covered_package_id_wash_packages__id_fk",
+          "tableFrom": "membership_plans",
+          "tableTo": "wash_packages",
+          "columnsFrom": ["covered_package_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "membership_subscriptions": {
+      "name": "membership_subscriptions",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "vehicle_id": {
+          "name": "vehicle_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "plan_id": {
+          "name": "plan_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "billing_day_of_month": {
+          "name": "billing_day_of_month",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "next_billing_date": {
+          "name": "next_billing_date",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "paused_until": {
+          "name": "paused_until",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "washes_this_cycle": {
+          "name": "washes_this_cycle",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "failed_payment_attempts": {
+          "name": "failed_payment_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "first_failed_at": {
+          "name": "first_failed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "stripe_subscription_id": {
+          "name": "stripe_subscription_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_membership_subscriptions_tenant": {
+          "name": "idx_membership_subscriptions_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "membership_subscriptions_tenant_id_tenants__id_fk": {
+          "name": "membership_subscriptions_tenant_id_tenants__id_fk",
+          "tableFrom": "membership_subscriptions",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "membership_subscriptions_customer_id_customers__id_fk": {
+          "name": "membership_subscriptions_customer_id_customers__id_fk",
+          "tableFrom": "membership_subscriptions",
+          "tableTo": "customers",
+          "columnsFrom": ["customer_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "membership_subscriptions_vehicle_id_vehicles__id_fk": {
+          "name": "membership_subscriptions_vehicle_id_vehicles__id_fk",
+          "tableFrom": "membership_subscriptions",
+          "tableTo": "vehicles",
+          "columnsFrom": ["vehicle_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "membership_subscriptions_plan_id_membership_plans__id_fk": {
+          "name": "membership_subscriptions_plan_id_membership_plans__id_fk",
+          "tableFrom": "membership_subscriptions",
+          "tableTo": "membership_plans",
+          "columnsFrom": ["plan_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "ticket_comments": {
+      "name": "ticket_comments",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "author_id": {
+          "name": "author_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "author_type": {
+          "name": "author_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'staff'"
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_ticket_comments_tenant": {
+          "name": "idx_ticket_comments_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "ticket_comments_tenant_id_tenants__id_fk": {
+          "name": "ticket_comments_tenant_id_tenants__id_fk",
+          "tableFrom": "ticket_comments",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_comments_ticket_id_tickets__id_fk": {
+          "name": "ticket_comments_ticket_id_tickets__id_fk",
+          "tableFrom": "ticket_comments",
+          "tableTo": "tickets",
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_comments_author_id_users_id_fk": {
+          "name": "ticket_comments_author_id_users_id_fk",
+          "tableFrom": "ticket_comments",
+          "tableTo": "users",
+          "columnsFrom": ["author_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tickets": {
+      "name": "tickets",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "wash_order_id": {
+          "name": "wash_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'general'"
+        },
+        "priority": {
+          "name": "priority",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'normal'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'open'"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "assigned_to_id": {
+          "name": "assigned_to_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'in-app'"
+        },
+        "first_responded_at": {
+          "name": "first_responded_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_by_id": {
+          "name": "created_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_tickets_tenant": {
+          "name": "idx_tickets_tenant",
+          "columns": ["tenant_id", "status"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tickets_tenant_id_tenants__id_fk": {
+          "name": "tickets_tenant_id_tenants__id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tickets_location_id_locations__id_fk": {
+          "name": "tickets_location_id_locations__id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "tickets_customer_id_customers__id_fk": {
+          "name": "tickets_customer_id_customers__id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "customers",
+          "columnsFrom": ["customer_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tickets_wash_order_id_wash_orders__id_fk": {
+          "name": "tickets_wash_order_id_wash_orders__id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "wash_orders",
+          "columnsFrom": ["wash_order_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "tickets_assigned_to_id_users_id_fk": {
+          "name": "tickets_assigned_to_id_users_id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "users",
+          "columnsFrom": ["assigned_to_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "tickets_created_by_id_users_id_fk": {
+          "name": "tickets_created_by_id_users_id_fk",
+          "tableFrom": "tickets",
+          "tableTo": "users",
+          "columnsFrom": ["created_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "employees": {
+      "name": "employees",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "hire_date": {
+          "name": "hire_date",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "hourly_rate": {
+          "name": "hourly_rate",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "annual_salary": {
+          "name": "annual_salary",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "commission_rate": {
+          "name": "commission_rate",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "emergency_contact_name": {
+          "name": "emergency_contact_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "emergency_contact_phone": {
+          "name": "emergency_contact_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_employees_tenant": {
+          "name": "idx_employees_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "employees_tenant_id_tenants__id_fk": {
+          "name": "employees_tenant_id_tenants__id_fk",
+          "tableFrom": "employees",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "employees_location_id_locations__id_fk": {
+          "name": "employees_location_id_locations__id_fk",
+          "tableFrom": "employees",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "employees_user_id_users_id_fk": {
+          "name": "employees_user_id_users_id_fk",
+          "tableFrom": "employees",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "leave_requests": {
+      "name": "leave_requests",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "employee_id": {
+          "name": "employee_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "approved_by_id": {
+          "name": "approved_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_leave_requests_tenant": {
+          "name": "idx_leave_requests_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "leave_requests_tenant_id_tenants__id_fk": {
+          "name": "leave_requests_tenant_id_tenants__id_fk",
+          "tableFrom": "leave_requests",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "leave_requests_employee_id_employees__id_fk": {
+          "name": "leave_requests_employee_id_employees__id_fk",
+          "tableFrom": "leave_requests",
+          "tableTo": "employees",
+          "columnsFrom": ["employee_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "leave_requests_approved_by_id_users_id_fk": {
+          "name": "leave_requests_approved_by_id_users_id_fk",
+          "tableFrom": "leave_requests",
+          "tableTo": "users",
+          "columnsFrom": ["approved_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "shifts": {
+      "name": "shifts",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "employee_id": {
+          "name": "employee_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bay_id": {
+          "name": "bay_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'scheduled'"
+        },
+        "checked_in_at": {
+          "name": "checked_in_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checked_out_at": {
+          "name": "checked_out_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_shifts_tenant": {
+          "name": "idx_shifts_tenant",
+          "columns": ["tenant_id", "starts_at"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "shifts_tenant_id_tenants__id_fk": {
+          "name": "shifts_tenant_id_tenants__id_fk",
+          "tableFrom": "shifts",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "shifts_location_id_locations__id_fk": {
+          "name": "shifts_location_id_locations__id_fk",
+          "tableFrom": "shifts",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "shifts_employee_id_employees__id_fk": {
+          "name": "shifts_employee_id_employees__id_fk",
+          "tableFrom": "shifts",
+          "tableTo": "employees",
+          "columnsFrom": ["employee_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "shifts_bay_id_service_bays__id_fk": {
+          "name": "shifts_bay_id_service_bays__id_fk",
+          "tableFrom": "shifts",
+          "tableTo": "service_bays",
+          "columnsFrom": ["bay_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "location_stock": {
+      "name": "location_stock",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "supply_id": {
+          "name": "supply_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity_on_hand": {
+          "name": "quantity_on_hand",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_location_stock_location_supply": {
+          "name": "uq_location_stock_location_supply",
+          "columns": ["location_id", "supply_id"],
+          "isUnique": true
+        },
+        "idx_location_stock_tenant": {
+          "name": "idx_location_stock_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "location_stock_tenant_id_tenants__id_fk": {
+          "name": "location_stock_tenant_id_tenants__id_fk",
+          "tableFrom": "location_stock",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "location_stock_location_id_locations__id_fk": {
+          "name": "location_stock_location_id_locations__id_fk",
+          "tableFrom": "location_stock",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "location_stock_supply_id_supplies__id_fk": {
+          "name": "location_stock_supply_id_supplies__id_fk",
+          "tableFrom": "location_stock",
+          "tableTo": "supplies",
+          "columnsFrom": ["supply_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "package_supply_usage": {
+      "name": "package_supply_usage",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "package_id": {
+          "name": "package_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "supply_id": {
+          "name": "supply_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity_per_wash": {
+          "name": "quantity_per_wash",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_package_supply_usage_tenant": {
+          "name": "idx_package_supply_usage_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "package_supply_usage_tenant_id_tenants__id_fk": {
+          "name": "package_supply_usage_tenant_id_tenants__id_fk",
+          "tableFrom": "package_supply_usage",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "package_supply_usage_package_id_wash_packages__id_fk": {
+          "name": "package_supply_usage_package_id_wash_packages__id_fk",
+          "tableFrom": "package_supply_usage",
+          "tableTo": "wash_packages",
+          "columnsFrom": ["package_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "package_supply_usage_supply_id_supplies__id_fk": {
+          "name": "package_supply_usage_supply_id_supplies__id_fk",
+          "tableFrom": "package_supply_usage",
+          "tableTo": "supplies",
+          "columnsFrom": ["supply_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "purchase_order_lines": {
+      "name": "purchase_order_lines",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purchase_order_id": {
+          "name": "purchase_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "supply_id": {
+          "name": "supply_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity_ordered": {
+          "name": "quantity_ordered",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity_received": {
+          "name": "quantity_received",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "unit_cost": {
+          "name": "unit_cost",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_purchase_order_lines_tenant": {
+          "name": "idx_purchase_order_lines_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "purchase_order_lines_tenant_id_tenants__id_fk": {
+          "name": "purchase_order_lines_tenant_id_tenants__id_fk",
+          "tableFrom": "purchase_order_lines",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "purchase_order_lines_purchase_order_id_purchase_orders__id_fk": {
+          "name": "purchase_order_lines_purchase_order_id_purchase_orders__id_fk",
+          "tableFrom": "purchase_order_lines",
+          "tableTo": "purchase_orders",
+          "columnsFrom": ["purchase_order_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "purchase_order_lines_supply_id_supplies__id_fk": {
+          "name": "purchase_order_lines_supply_id_supplies__id_fk",
+          "tableFrom": "purchase_order_lines",
+          "tableTo": "supplies",
+          "columnsFrom": ["supply_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "purchase_orders": {
+      "name": "purchase_orders",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "supplier_id": {
+          "name": "supplier_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "total_amount": {
+          "name": "total_amount",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "created_by_id": {
+          "name": "created_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approved_by_id": {
+          "name": "approved_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sent_at": {
+          "name": "sent_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_purchase_orders_tenant": {
+          "name": "idx_purchase_orders_tenant",
+          "columns": ["tenant_id", "status"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "purchase_orders_tenant_id_tenants__id_fk": {
+          "name": "purchase_orders_tenant_id_tenants__id_fk",
+          "tableFrom": "purchase_orders",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "purchase_orders_location_id_locations__id_fk": {
+          "name": "purchase_orders_location_id_locations__id_fk",
+          "tableFrom": "purchase_orders",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "purchase_orders_supplier_id_suppliers__id_fk": {
+          "name": "purchase_orders_supplier_id_suppliers__id_fk",
+          "tableFrom": "purchase_orders",
+          "tableTo": "suppliers",
+          "columnsFrom": ["supplier_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "purchase_orders_created_by_id_users_id_fk": {
+          "name": "purchase_orders_created_by_id_users_id_fk",
+          "tableFrom": "purchase_orders",
+          "tableTo": "users",
+          "columnsFrom": ["created_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "purchase_orders_approved_by_id_users_id_fk": {
+          "name": "purchase_orders_approved_by_id_users_id_fk",
+          "tableFrom": "purchase_orders",
+          "tableTo": "users",
+          "columnsFrom": ["approved_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "stock_adjustments": {
+      "name": "stock_adjustments",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "supply_id": {
+          "name": "supply_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity_delta": {
+          "name": "quantity_delta",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason_code": {
+          "name": "reason_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approved_by_id": {
+          "name": "approved_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_by_id": {
+          "name": "created_by_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_stock_adjustments_tenant": {
+          "name": "idx_stock_adjustments_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "stock_adjustments_tenant_id_tenants__id_fk": {
+          "name": "stock_adjustments_tenant_id_tenants__id_fk",
+          "tableFrom": "stock_adjustments",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "stock_adjustments_location_id_locations__id_fk": {
+          "name": "stock_adjustments_location_id_locations__id_fk",
+          "tableFrom": "stock_adjustments",
+          "tableTo": "locations",
+          "columnsFrom": ["location_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "stock_adjustments_supply_id_supplies__id_fk": {
+          "name": "stock_adjustments_supply_id_supplies__id_fk",
+          "tableFrom": "stock_adjustments",
+          "tableTo": "supplies",
+          "columnsFrom": ["supply_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "stock_adjustments_approved_by_id_employees__id_fk": {
+          "name": "stock_adjustments_approved_by_id_employees__id_fk",
+          "tableFrom": "stock_adjustments",
+          "tableTo": "employees",
+          "columnsFrom": ["approved_by_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "stock_adjustments_created_by_id_users_id_fk": {
+          "name": "stock_adjustments_created_by_id_users_id_fk",
+          "tableFrom": "stock_adjustments",
+          "tableTo": "users",
+          "columnsFrom": ["created_by_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "suppliers": {
+      "name": "suppliers",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "lead_time_days": {
+          "name": "lead_time_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_suppliers_tenant": {
+          "name": "idx_suppliers_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "suppliers_tenant_id_tenants__id_fk": {
+          "name": "suppliers_tenant_id_tenants__id_fk",
+          "tableFrom": "suppliers",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "supplies": {
+      "name": "supplies",
+      "columns": {
+        "_id": {
+          "name": "_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "warehouse": {
+          "name": "warehouse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'main-chemical-room'"
+        },
+        "unit": {
+          "name": "unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unit'"
+        },
+        "quantity_on_hand": {
+          "name": "quantity_on_hand",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "unit_cost": {
+          "name": "unit_cost",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "supplier_id": {
+          "name": "supplier_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_supplies_tenant": {
+          "name": "idx_supplies_tenant",
+          "columns": ["tenant_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "supplies_tenant_id_tenants__id_fk": {
+          "name": "supplies_tenant_id_tenants__id_fk",
+          "tableFrom": "supplies",
+          "tableTo": "tenants",
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "supplies_supplier_id_suppliers__id_fk": {
+          "name": "supplies_supplier_id_suppliers__id_fk",
+          "tableFrom": "supplies",
+          "tableTo": "suppliers",
+          "columnsFrom": ["supplier_id"],
+          "columnsTo": ["_id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

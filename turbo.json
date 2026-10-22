@@ -1,0 +1,26 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": { "dependsOn": ["^build"], "outputs": ["dist/**", "build/**"] },
+    "dev": { "cache": false, "persistent": true },
+    "start": { "dependsOn": ["build"] },
+    "db:generate": { "cache": false },
+    "db:migrate": { "cache": false },
+    "db:studio": { "cache": false, "persistent": true },
+    "test": {},
+    "test:ui": { "cache": false, "persistent": true },
+    "test:e2e": { "cache": false },
+    "typecheck": { "dependsOn": ["^build"] }
+  },
+  "globalEnv": [
+    "NODE_ENV",
+    "PORT",
+    "LIBSQL_URL",
+    "LIBSQL_AUTH_TOKEN",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
+    "FRONTEND_URL",
+    "VITE_API_URL",
+    "PUBLIC_API_URL"
+  ]
+}

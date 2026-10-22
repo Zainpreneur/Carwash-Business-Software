@@ -1,0 +1,41 @@
+{
+  "name": "@carwash/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/server.js",
+  "types": "./src/app.ts",
+  "exports": {
+    ".": "./src/app.ts",
+    "./app": "./src/app.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "tsx src/server.ts",
+    "seed": "tsx src/scripts/seed.ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@carwash/db": "workspace:*",
+    "@carwash/shared": "workspace:*",
+    "@hono/node-server": "^1.13.7",
+    "@hono/zod-validator": "^0.4.1",
+    "@libsql/client": "^0.14.0",
+    "@scalar/hono-api-reference": "^0.12.13",
+    "better-auth": "^1.0.7",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.13",
+    "pino": "^9.5.0",
+    "stripe": "^17.4.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "pino-pretty": "^11.3.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.3"
+  }
+}

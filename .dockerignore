@@ -1,0 +1,12 @@
+node_modules
+.git
+.turbo
+dist
+build
+coverage
+*.log
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
