@@ -65,5 +65,35 @@ services:
   #     - "8080:8080"
   #   restart: unless-stopped
 
+  # --- Typesense search engine (optional) ---------------------------
+  typesense:
+    image: typesense/typesense:24.4
+    container_name: typesense
+    ports:
+      - "8182:8182"
+    environment:
+      - TYPESENSE_API_KEY=abc
+      - TYPESENSE_DATA_DIR=/data
+      - TYPESENSE_NO_ANALYTICS=true
+    volumes:
+      - typesense_data:/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis_data:
+
 volumes:
   libsql_data:
+  typesense_data:
+  redis_data:

@@ -24,10 +24,13 @@
     "@hono/zod-validator": "^0.4.1",
     "@libsql/client": "^0.14.0",
     "@scalar/hono-api-reference": "^0.12.13",
+    "@trpc/server": "^11.19.0",
     "better-auth": "^1.0.7",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.13.13",
     "pino": "^9.5.0",
+    "socket.io": "^4.8.4",
+    "socket.io-client": "^4.8.4",
     "stripe": "^17.4.0",
     "zod": "^3.23.8"
   },
