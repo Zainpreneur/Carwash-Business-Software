@@ -9,13 +9,14 @@ const {
 const { getShifts, createShift, updateShift, clockIn, clockOut, deleteShift } = require('../controllers/shiftController');
 const { getLeaveRequests, createLeaveRequest, decideLeaveRequest } = require('../controllers/leaveController');
 const { protect, authorize } = require('../middleware/authMiddleware');
+const { requireFeature } = require('../services/tenantService');
 
 const router = express.Router();
 
-// HR data (03-operations/hr.md) — admin/manager only, matching this app's existing gate on
-// Staff/Expenses/Reports. Payroll was cut with the ledger/accounting module; this keeps
-// employees, shifts/scheduling, and leave.
-router.use(protect, authorize('admin', 'manager'));
+// HR data (03-operations/hr.md) — manager and above, and only on plans that
+// include the HR module. Payroll was cut with the ledger/accounting module;
+// this keeps employees, shifts/scheduling, and leave.
+router.use(protect, authorize('manager'), requireFeature('hr'));
 
 router.route('/employees').get(getEmployees).post(createEmployee);
 router.route('/employees/:id').get(getEmployee).put(updateEmployee).delete(deleteEmployee);

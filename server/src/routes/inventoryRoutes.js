@@ -9,12 +9,13 @@ const {
   closePO,
 } = require('../controllers/purchaseOrderController');
 const { protect, authorize } = require('../middleware/authMiddleware');
+const { requireFeature } = require('../services/tenantService');
 
 const router = express.Router();
 
-// Inventory data (03-operations/inventory.md) — admin/manager only, matching this app's
-// existing gate on Expenses/Finance/HR. The AI stock-forecast endpoints were cut.
-router.use(protect, authorize('admin', 'manager'));
+// Inventory data (03-operations/inventory.md) — manager and above, and only on
+// plans that include the inventory module. The AI stock-forecast endpoints were cut.
+router.use(protect, authorize('manager'), requireFeature('inventory'));
 
 router.route('/supplies').get(getSupplies).post(createSupply);
 router.route('/supplies/:id').put(updateSupply).delete(deleteSupply);

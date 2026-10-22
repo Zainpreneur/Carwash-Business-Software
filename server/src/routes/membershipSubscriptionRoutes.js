@@ -7,15 +7,18 @@ const {
   markPaidManually,
   cancelSubscription,
 } = require('../controllers/membershipController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middleware/authMiddleware');
+const { requireFeature } = require('../services/tenantService');
 
 const router = express.Router();
 
-router.use(protect);
-router.route('/').get(getSubscriptions).post(createSubscription);
-router.patch('/:id/pause', pauseSubscription);
-router.patch('/:id/resume', resumeSubscription);
-router.patch('/:id/mark-paid', markPaidManually);
-router.patch('/:id/cancel', cancelSubscription);
+// Membership subscriptions belong to the membership module, so they follow
+// the same plan gate.
+router.use(protect, requireFeature('memberships'));
+router.route('/').get(getSubscriptions).post(authorize('staff'), createSubscription);
+router.patch('/:id/pause', authorize('manager'), pauseSubscription);
+router.patch('/:id/resume', authorize('manager'), resumeSubscription);
+router.patch('/:id/mark-paid', authorize('manager'), markPaidManually);
+router.patch('/:id/cancel', authorize('manager'), cancelSubscription);
 
 module.exports = router;

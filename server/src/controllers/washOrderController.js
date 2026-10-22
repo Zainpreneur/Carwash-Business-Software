@@ -76,7 +76,7 @@ const getWashOrders = asyncHandler(async (req, res) => {
   // only, not the full order history — staff can never pull completed/cancelled orders
   // through this endpoint, regardless of what status/active they request. Site-manager-
   // level history (the /wash-queue "show completed & cancelled" view) is admin/manager only.
-  if (req.user.role === 'staff') {
+  if (req.membership?.role === 'staff') {
     // A specific non-terminal status (e.g. the Checkout page's ready-for-pickup) still
     // narrows the result; a terminal one is silently denied by falling back to "all active".
     filters.push(

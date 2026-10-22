@@ -9,6 +9,7 @@ import Spinner from '../components/ui/Spinner'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
 import { useAuth } from '../context/AuthContext'
+import { useTenant } from '../context/TenantContext'
 
 const categories = ['basic', 'premium', 'detailing', 'addon']
 const categoryColor = { basic: 'blue', premium: 'purple', detailing: 'amber', addon: 'cyan' }
@@ -17,7 +18,8 @@ const emptyForm = { name: '', description: '', category: 'basic', price: '', dur
 
 const Services = () => {
   const { user } = useAuth()
-  const canEdit = user?.role === 'admin' || user?.role === 'manager'
+  const { can } = useTenant()
+  const canEdit = can('manager')
   const [services, setServices] = useState([])
   const [loading, setLoading] = useState(true)
 

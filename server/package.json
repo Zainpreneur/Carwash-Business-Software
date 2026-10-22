@@ -4,6 +4,9 @@
   "description": "Car Wash Business Management API",
   "main": "src/server.js",
   "type": "commonjs",
+  "allowScripts": {
+    "esbuild": true
+  },
   "scripts": {
     "start": "node src/server.js",
     "serve": "node src/server.js",

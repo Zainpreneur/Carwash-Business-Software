@@ -2,11 +2,26 @@
 // success/failure - drives MembershipSubscription's billing-charge-failed transition
 // directly"). Mounted with a raw body parser in app.js, before the global express.json()
 // middleware — Stripe's signature verification needs the exact bytes it signed.
+//
+// Stripe calls this without a session, so the handler has to work out which business
+// (tenant) each event belongs to and then run the actual work inside that tenant's
+// context — otherwise a membership change would be written against the wrong data.
 const { eq } = require('drizzle-orm');
 const { db } = require('../config/db');
-const { membershipSubscriptions } = require('../db/schema');
+const {
+  membershipSubscriptions,
+  membershipPlans,
+  customers,
+  vehicles,
+} = require('../db/schema');
+const { runAsPlatform, runWithTenant } = require('../db/tenantDb');
 const { getStripe, isStripeConfigured, isWebhookConfigured } = require('../config/stripe');
-const { membershipPaymentFailedDunning, membershipSuspended, membershipCancelledForNonPayment, sendMembershipWelcome } = require('../utils/automations');
+const {
+  membershipPaymentFailedDunning,
+  membershipSuspended,
+  membershipCancelledForNonPayment,
+  sendMembershipWelcome,
+} = require('../utils/automations');
 
 // Membership billing state machine (was the deterministic portion of the cut
 // membership-billing-agent): 3 failed attempts or 7 days unresolved -> suspended,
@@ -24,7 +39,7 @@ const nextMonth = (from = new Date()) => {
 
 const evaluateFailedPayment = (subscription, now = new Date()) => {
   const attempts = (subscription.failedPaymentAttempts || 0) + 1;
-  const firstFailedAt = subscription.firstFailedAt ? new Date(subscription.firstFailedAt) : now;
+  const firstFailedAt = subscription.firstFailedAt || now;
   const daysUnresolved = (now - firstFailedAt) / DAY_MS;
 
   if (subscription.status === 'suspended') {
@@ -42,25 +57,39 @@ const evaluateFailedPayment = (subscription, now = new Date()) => {
 
 const evaluateSucceededPayment = () => ({ status: 'active', failedPaymentAttempts: 0, firstFailedAt: null });
 
+/** Find the business a Stripe customer/plan belongs to (cross-tenant lookup). */
+const tenantOfCustomer = async (customerId) => {
+  const [customer] = await runAsPlatform(() =>
+    db.select().from(customers).where(eq(customers._id, customerId))
+  );
+  return customer?.tenant || null;
+};
+
 const handleCheckoutCompleted = async (session) => {
   if (session.mode !== 'subscription') return;
-  const { appCustomerId, appVehicleId, appPlanId, billingDayOfMonth } = session.metadata || {};
+  const { appCustomerId, appVehicleId, appPlanId, appTenantId, billingDayOfMonth } =
+    session.metadata || {};
   if (!appCustomerId || !appVehicleId || !appPlanId) return;
 
-  const [created] = await db
-    .insert(membershipSubscriptions)
-    .values({
-      customer: appCustomerId,
-      vehicle: appVehicleId,
-      plan: appPlanId,
-      billingDayOfMonth: Number(billingDayOfMonth) || new Date().getDate(),
-      nextBillingDate: nextMonth(),
-      status: 'active',
-      stripeSubscriptionId: session.subscription,
-    })
-    .returning();
+  const tenantId = appTenantId || (await tenantOfCustomer(appCustomerId));
+  if (!tenantId) return;
 
-  await sendMembershipWelcome(created);
+  const created = await runWithTenant(tenantId, () =>
+    db
+      .insert(membershipSubscriptions)
+      .values({
+        customer: appCustomerId,
+        vehicle: appVehicleId,
+        plan: appPlanId,
+        billingDayOfMonth: Number(billingDayOfMonth) || new Date().getDate(),
+        nextBillingDate: nextMonth(),
+        status: 'active',
+        stripeSubscriptionId: session.subscription,
+      })
+      .returning()
+  );
+
+  if (created) await runWithTenant(tenantId, () => sendMembershipWelcome(created));
 };
 
 // billing-charge-failed transitions from Active, or advances the clock on an already-
@@ -71,56 +100,86 @@ const handleCheckoutCompleted = async (session) => {
 // this is the non-payment path, not a status Stripe should be able to override.
 const handlePaymentFailed = async (invoice) => {
   if (!invoice.subscription) return;
-  const [sub] = await db
-    .select()
-    .from(membershipSubscriptions)
-    .where(eq(membershipSubscriptions.stripeSubscriptionId, invoice.subscription));
+
+  const sub = await runAsPlatform(async () => {
+    const [row] = await db
+      .select()
+      .from(membershipSubscriptions)
+      .where(eq(membershipSubscriptions.stripeSubscriptionId, invoice.subscription));
+    return row;
+  });
   if (!sub || !['active', 'past-due', 'suspended'].includes(sub.status)) return;
 
   const decision = evaluateFailedPayment(sub);
-  const [updated] = await db
-    .update(membershipSubscriptions)
-    .set({ ...decision, updatedAt: new Date() })
-    .where(eq(membershipSubscriptions._id, sub._id))
-    .returning();
+  const updated = await runWithTenant(sub.tenant, () =>
+    db
+      .update(membershipSubscriptions)
+      .set({ ...decision, updatedAt: new Date() })
+      .where(eq(membershipSubscriptions._id, sub._id))
+      .returning()
+  );
 
   if (decision.status === 'cancelled') {
     if (sub.stripeSubscriptionId && isStripeConfigured()) {
-      await getStripe().subscriptions.cancel(sub.stripeSubscriptionId).catch((err) => console.error('[stripe] cancel-for-nonpayment failed:', err.message));
+      await getStripe()
+        .subscriptions.cancel(sub.stripeSubscriptionId)
+        .catch((err) => console.error('[stripe] cancel-for-nonpayment failed:', err.message));
     }
-    await membershipCancelledForNonPayment(updated);
+    await runWithTenant(sub.tenant, () => membershipCancelledForNonPayment(updated));
   } else if (decision.status === 'suspended' && sub.status !== 'suspended') {
-    await membershipSuspended(updated); // only notify on the transition *into* suspended, not every retry after
+    // only notify on the transition *into* suspended, not every retry after
+    await runWithTenant(sub.tenant, () => membershipSuspended(updated));
   } else {
-    await membershipPaymentFailedDunning(updated);
+    await runWithTenant(sub.tenant, () => membershipPaymentFailedDunning(updated));
   }
 };
 
 const handlePaymentSucceeded = async (invoice) => {
   if (!invoice.subscription) return;
-  const [sub] = await db
-    .select()
-    .from(membershipSubscriptions)
-    .where(eq(membershipSubscriptions.stripeSubscriptionId, invoice.subscription));
+
+  const sub = await runAsPlatform(async () => {
+    const [row] = await db
+      .select()
+      .from(membershipSubscriptions)
+      .where(eq(membershipSubscriptions.stripeSubscriptionId, invoice.subscription));
+    return row;
+  });
   if (!sub) return;
 
-  const decision = ['past-due', 'suspended'].includes(sub.status) ? evaluateSucceededPayment() : { status: sub.status, failedPaymentAttempts: 0, firstFailedAt: null };
-  await db
-    .update(membershipSubscriptions)
-    .set({
-      ...decision,
-      washesThisCycle: 0,
-      nextBillingDate: nextMonth(),
-      updatedAt: new Date(),
-    })
-    .where(eq(membershipSubscriptions._id, sub._id));
+  const decision = ['past-due', 'suspended'].includes(sub.status)
+    ? evaluateSucceededPayment()
+    : { status: sub.status, failedPaymentAttempts: 0, firstFailedAt: null };
+
+  await runWithTenant(sub.tenant, () =>
+    db
+      .update(membershipSubscriptions)
+      .set({
+        ...decision,
+        washesThisCycle: 0,
+        nextBillingDate: nextMonth(),
+        updatedAt: new Date(),
+      })
+      .where(eq(membershipSubscriptions._id, sub._id))
+  );
 };
 
 const handleSubscriptionDeleted = async (stripeSubscription) => {
-  await db
-    .update(membershipSubscriptions)
-    .set({ status: 'cancelled', updatedAt: new Date() })
-    .where(eq(membershipSubscriptions.stripeSubscriptionId, stripeSubscription.id));
+  const rows = await runAsPlatform(async () => {
+    const found = await db
+      .select()
+      .from(membershipSubscriptions)
+      .where(eq(membershipSubscriptions.stripeSubscriptionId, stripeSubscription.id));
+    return found;
+  });
+
+  for (const row of rows) {
+    await runWithTenant(row.tenant, () =>
+      db
+        .update(membershipSubscriptions)
+        .set({ status: 'cancelled', updatedAt: new Date() })
+        .where(eq(membershipSubscriptions._id, row._id))
+    );
+  }
 };
 
 const handleStripeWebhook = async (req, res) => {

@@ -13,12 +13,14 @@ import BookingFormModal from '../components/bookings/BookingFormModal'
 import BookingDetailModal from '../components/bookings/BookingDetailModal'
 import BookingsCalendar from '../components/bookings/BookingsCalendar'
 import { useAuth } from '../context/AuthContext'
+import { useTenant } from '../context/TenantContext'
 
 const statusOptions = ['pending', 'confirmed', 'in-progress', 'completed', 'cancelled']
 
 const Bookings = () => {
   const { user } = useAuth()
-  const canDelete = user?.role === 'admin' || user?.role === 'manager'
+  const { can } = useTenant()
+  const canDelete = can('manager')
   const [data, setData] = useState({ data: [], total: 0, page: 1, pages: 1 })
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState('')

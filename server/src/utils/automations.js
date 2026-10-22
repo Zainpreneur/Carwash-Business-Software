@@ -77,7 +77,7 @@ const membershipPaymentFailedDunning = async (subscription) => {
     });
   }
 
-  await notifyRoles(['admin', 'manager'], {
+  await notifyRoles(['owner', 'admin', 'manager'], {
     type: 'membership_payment_failed',
     title: 'Membership payment failed',
     message: `${customer.name}'s ${plan?.name || 'membership'} payment failed (attempt ${subscription.failedPaymentAttempts}).`,
@@ -92,7 +92,7 @@ const membershipPaymentFailedDunning = async (subscription) => {
 const membershipSuspended = async (subscription) => {
   const [customer] = await db.select().from(customers).where(eq(customers._id, subscription.customer));
   const [plan] = await db.select().from(membershipPlans).where(eq(membershipPlans._id, subscription.plan));
-  await notifyRoles(['admin', 'manager'], {
+  await notifyRoles(['owner', 'admin', 'manager'], {
     type: 'membership_suspended',
     title: 'Membership suspended',
     message: `${customer?.name || 'A customer'}'s ${plan?.name || 'membership'} was suspended after unresolved payment failures.`,
@@ -102,7 +102,7 @@ const membershipSuspended = async (subscription) => {
 const membershipCancelledForNonPayment = async (subscription) => {
   const [customer] = await db.select().from(customers).where(eq(customers._id, subscription.customer));
   const [plan] = await db.select().from(membershipPlans).where(eq(membershipPlans._id, subscription.plan));
-  await notifyRoles(['admin', 'manager'], {
+  await notifyRoles(['owner', 'admin', 'manager'], {
     type: 'membership_cancelled_nonpayment',
     title: 'Membership cancelled (non-payment)',
     message: `${customer?.name || 'A customer'}'s ${plan?.name || 'membership'} was cancelled after 30 days unresolved.`,

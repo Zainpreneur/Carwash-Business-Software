@@ -9,12 +9,14 @@ import Spinner from '../components/ui/Spinner'
 import EmptyState from '../components/ui/EmptyState'
 import Badge from '../components/ui/Badge'
 import { useAuth } from '../context/AuthContext'
+import { useTenant } from '../context/TenantContext'
 
 const roles = ['admin', 'manager', 'staff']
 const emptyForm = { name: '', email: '', password: '', phone: '', role: 'staff', active: true }
 
 const Staff = () => {
   const { user: me } = useAuth()
+  const { can } = useTenant()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -85,7 +87,7 @@ const Staff = () => {
     }
   }
 
-  const canManage = me?.role === 'admin'
+  const canManage = can('admin')
 
   return (
     <div className="space-y-4">

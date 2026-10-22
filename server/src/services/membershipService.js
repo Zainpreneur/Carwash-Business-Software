@@ -71,6 +71,9 @@ const createSubscription = async ({ customerId, vehicleId, planId, successUrl, c
         appCustomerId: customerId,
         appVehicleId: vehicleId,
         appPlanId: planId,
+        // The business this membership belongs to — lets the webhook route the
+        // event back into the right tenant context.
+        appTenantId: customer.tenant,
         billingDayOfMonth: String(new Date().getDate()),
       },
     });

@@ -2,15 +2,50 @@
 // auto-updates Stock; closing pays the supplier invoice. The double-entry journal postings
 // that used to accompany these (ledger/accounting module) were removed — inventory math is
 // kept, the accounting layer is not.
-const { eq, sql } = require('drizzle-orm');
+const { and, eq, sql } = require('drizzle-orm');
 const { db } = require('../config/db');
-const { purchaseOrders, purchaseOrderLines, supplies, stockAdjustments } = require('../db/schema');
+const {
+  purchaseOrders,
+  purchaseOrderLines,
+  supplies,
+  stockAdjustments,
+  locationStock,
+} = require('../db/schema');
+
+/**
+ * Adjust the per-location quantity for a supply, creating the row on first use.
+ * The tenant-wide `supplies.quantity_on_hand` is the sum across locations, so
+ * both are kept in step.
+ */
+const adjustLocationStock = async ({ location, supply, delta }) => {
+  if (!location || !supply || !delta) return null;
+
+  const [existing] = await db
+    .select()
+    .from(locationStock)
+    .where(and(eq(locationStock.location, location), eq(locationStock.supply, supply)));
+
+  if (existing) {
+    const [updated] = await db
+      .update(locationStock)
+      .set({ quantityOnHand: sql`${locationStock.quantityOnHand} + ${delta}`, updatedAt: new Date() })
+      .where(eq(locationStock._id, existing._id))
+      .returning();
+    return updated;
+  }
+
+  const [created] = await db
+    .insert(locationStock)
+    .values({ location, supply, quantityOnHand: delta })
+    .returning();
+  return created;
+};
 
 // receivedLines: [{ lineId, quantityReceived }] — the quantity arriving *in this receipt*,
 // not the running total (supports a shipment arriving in more than one batch, per the
 // spec's own PartiallyReceived state). Over-receiving beyond what's still outstanding on a
 // line is silently capped, not rejected — a miscounted delivery shouldn't 500.
-const receivePurchaseOrder = async ({ purchaseOrderId, receivedLines }) => {
+const receivePurchaseOrder = async ({ purchaseOrderId, receivedLines, location }) => {
   const [po] = await db.select().from(purchaseOrders).where(eq(purchaseOrders._id, purchaseOrderId));
   if (!po) throw Object.assign(new Error('Purchase order not found'), { status: 404 });
   if (!['sent', 'partially-received'].includes(po.status)) {
@@ -31,6 +66,12 @@ const receivePurchaseOrder = async ({ purchaseOrderId, receivedLines }) => {
       .update(supplies)
       .set({ quantityOnHand: sql`${supplies.quantityOnHand} + ${applied}`, updatedAt: new Date() })
       .where(eq(supplies._id, line.supply));
+    // Keep the per-location breakdown in step when the receipt is for one site.
+    await adjustLocationStock({
+      location: location || po.location,
+      supply: line.supply,
+      delta: applied,
+    });
 
     line.quantityReceived += applied; // keep the in-memory copy current for the check below
   }
@@ -72,6 +113,12 @@ const postStockAdjustment = async (adjustment) => {
     .set({ quantityOnHand: sql`${supplies.quantityOnHand} + ${adjustment.quantityDelta}`, updatedAt: new Date() })
     .where(eq(supplies._id, supply._id))
     .returning();
+
+  await adjustLocationStock({
+    location: adjustment.location,
+    supply: supply._id,
+    delta: adjustment.quantityDelta,
+  });
 
   const [created] = await db.insert(stockAdjustments).values(adjustment).returning();
 

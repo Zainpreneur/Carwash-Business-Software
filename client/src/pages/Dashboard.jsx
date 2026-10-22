@@ -48,8 +48,31 @@ const Dashboard = () => {
 
   if (loading) return <Spinner full />
 
+  const greeting = (() => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
+    return 'Good evening'
+  })()
+
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">
+            {greeting} 👋
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Here's what's happening at your car wash today.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-slate-200">
+          <span className="text-xs text-slate-500">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </span>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard icon={DollarSign} label="Today's Revenue" value={currency(summary.todayRevenue)} sub={`${summary.todayCompletedCount} completed`} tone="green" />
         <StatCard icon={CalendarClock} label="Today's Bookings" value={summary.todayBookings} sub={`${summary.pendingBookings} pending`} tone="brand" />

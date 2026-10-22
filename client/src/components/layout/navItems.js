@@ -15,27 +15,33 @@ import {
   LifeBuoy,
   BriefcaseBusiness,
   Boxes,
+  Building2,
 } from 'lucide-react'
 
-// Role-based wash-floor views (carwash-compile/01-foundation/dashboards.md):
-// "My Queue" = Bay Attendant/Wash Technician home view, "Checkout" = Cashier home view
-// (both open to any floor staff), "Wash Ops" = Site Manager's full bay board + order
-// history (admin/manager only — RBAC also enforced server-side, see washOrderController).
+/**
+ * The navigation of a business workspace.
+ *
+ * `minRole` is the *minimum* privilege needed (owner > admin > manager > staff).
+ * `feature` is the plan flag that unlocks the page — a business on a plan
+ * without it never sees the item in the sidebar and gets an upgrade prompt if
+ * the URL is opened directly.
+ */
 export const navItems = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'staff'] },
-  { to: '/floor', label: 'My Queue', icon: ListOrdered, roles: ['admin', 'manager', 'staff'] },
-  { to: '/checkout', label: 'Checkout', icon: LogOut, roles: ['admin', 'manager', 'staff'] },
-  { to: '/wash-queue', label: 'Wash Ops', icon: Waves, roles: ['admin', 'manager'] },
-  { to: '/memberships', label: 'Memberships', icon: Users2, roles: ['admin', 'manager'] },
-  { to: '/tickets', label: 'Support', icon: LifeBuoy, roles: ['admin', 'manager', 'staff'] },
-  { to: '/bookings', label: 'Bookings', icon: CalendarClock, roles: ['admin', 'manager', 'staff'] },
-  { to: '/customers', label: 'Customers', icon: Users, roles: ['admin', 'manager', 'staff'] },
-  { to: '/vehicles', label: 'Vehicles', icon: Car, roles: ['admin', 'manager', 'staff'] },
-  { to: '/services', label: 'Services', icon: Sparkles, roles: ['admin', 'manager', 'staff'] },
-  { to: '/staff', label: 'Staff', icon: UserCog, roles: ['admin', 'manager'] },
-  { to: '/hr', label: 'HR', icon: BriefcaseBusiness, roles: ['admin', 'manager'] },
-  { to: '/inventory', label: 'Inventory', icon: Boxes, roles: ['admin', 'manager'] },
-  { to: '/expenses', label: 'Expenses', icon: Receipt, roles: ['admin', 'manager'] },
-  { to: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'manager'] },
-  { to: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'manager', 'staff'] },
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard, minRole: 'staff' },
+  { to: '/floor', label: 'My Queue', icon: ListOrdered, minRole: 'staff' },
+  { to: '/checkout', label: 'Checkout', icon: LogOut, minRole: 'staff' },
+  { to: '/wash-queue', label: 'Wash Ops', icon: Waves, minRole: 'manager' },
+  { to: '/memberships', label: 'Memberships', icon: Users2, minRole: 'manager', feature: 'memberships' },
+  { to: '/tickets', label: 'Support', icon: LifeBuoy, minRole: 'staff' },
+  { to: '/bookings', label: 'Bookings', icon: CalendarClock, minRole: 'staff' },
+  { to: '/customers', label: 'Customers', icon: Users, minRole: 'staff' },
+  { to: '/vehicles', label: 'Vehicles', icon: Car, minRole: 'staff' },
+  { to: '/services', label: 'Services', icon: Sparkles, minRole: 'staff' },
+  { to: '/staff', label: 'Staff', icon: UserCog, minRole: 'manager' },
+  { to: '/hr', label: 'HR', icon: BriefcaseBusiness, minRole: 'manager', feature: 'hr' },
+  { to: '/inventory', label: 'Inventory', icon: Boxes, minRole: 'manager', feature: 'inventory' },
+  { to: '/expenses', label: 'Expenses', icon: Receipt, minRole: 'manager' },
+  { to: '/reports', label: 'Reports', icon: BarChart3, minRole: 'manager', feature: 'reports' },
+  { to: '/business', label: 'Business', icon: Building2, minRole: 'admin' },
+  { to: '/settings', label: 'My Profile', icon: Settings, minRole: 'staff' },
 ]

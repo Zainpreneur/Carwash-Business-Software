@@ -7,7 +7,7 @@ import { getErrorMessage } from '../api/client'
 const colorOptions = ['#0284c7', '#7c3aed', '#0891b2', '#ea580c', '#16a34a', '#e11d48', '#db2777', '#65a30d']
 
 const Settings = () => {
-  const { user, logout } = useAuth()
+  const { user, logout, updateProfile } = useAuth()
   const [form, setForm] = useState({ name: user?.name || '', phone: '', avatarColor: user?.avatarColor || colorOptions[0] })
   const [password, setPassword] = useState('')
   const [saving, setSaving] = useState(false)
@@ -21,8 +21,12 @@ const Settings = () => {
       const payload = { name: form.name, phone: form.phone, avatarColor: form.avatarColor }
       if (password) payload.password = password
       const updated = await usersApi.update(user._id, payload)
-      localStorage.setItem('cw_user', JSON.stringify({ ...user, ...updated }))
-      toast.success('Profile updated. Refresh to see all changes.')
+      updateProfile({
+        name: updated?.name ?? form.name,
+        phone: updated?.phone ?? form.phone,
+        avatarColor: updated?.avatarColor ?? form.avatarColor,
+      })
+      toast.success('Profile updated')
       setPassword('')
     } catch (err) {
       toast.error(getErrorMessage(err))

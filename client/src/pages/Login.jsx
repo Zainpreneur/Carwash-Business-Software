@@ -5,6 +5,13 @@ import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { getErrorMessage } from '../api/client'
 
+const DEMO_ACCOUNTS = [
+  { label: 'owner', email: 'owner@carwash.com', password: 'admin123', business: 'Sparkle Wash' },
+  { label: 'manager', email: 'manager@carwash.com', password: 'manager123', business: 'Sparkle Wash' },
+  { label: 'staff', email: 'john@carwash.com', password: 'staff123', business: 'Sparkle Wash' },
+  { label: 'business 2', email: 'owner@autoshine.com', password: 'admin123', business: 'AutoShine' },
+]
+
 const Login = () => {
   const { login } = useAuth()
   const navigate = useNavigate()
@@ -16,9 +23,13 @@ const Login = () => {
     e.preventDefault()
     setLoading(true)
     try {
-      await login(form)
+      const session = await login(form)
       toast.success('Welcome back!')
-      navigate('/')
+      if (session.platformRole === 'platform_admin') {
+        navigate('/platform')
+        return
+      }
+      navigate(`/t/${session.tenant?.slug || ''}`)
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -26,13 +37,8 @@ const Login = () => {
     }
   }
 
-  const fillDemo = (role) => {
-    const creds = {
-      admin: { email: 'admin@carwash.com', password: 'admin123' },
-      manager: { email: 'manager@carwash.com', password: 'manager123' },
-      staff: { email: 'john@carwash.com', password: 'staff123' },
-    }
-    setForm(creds[role])
+  const fillDemo = (account) => {
+    setForm({ email: account.email, password: account.password })
   }
 
   return (
@@ -89,23 +95,23 @@ const Login = () => {
 
           <div className="mt-5 border-t border-slate-100 pt-4">
             <p className="mb-2 text-center text-xs text-slate-400">Quick demo login</p>
-            <div className="grid grid-cols-3 gap-2">
-              {['admin', 'manager', 'staff'].map((role) => (
+            <div className="grid grid-cols-2 gap-2">
+              {DEMO_ACCOUNTS.map((account) => (
                 <button
-                  key={role}
-                  onClick={() => fillDemo(role)}
-                  className="btn-secondary py-1.5 text-xs capitalize"
+                  key={account.email}
+                  onClick={() => fillDemo(account)}
+                  className="btn-secondary py-1.5 text-xs"
                   type="button"
                 >
-                  {role}
+                  {account.label}
                 </button>
               ))}
             </div>
           </div>
 
           <p className="mt-5 text-center text-sm text-slate-500">
-            Don&apos;t have an account?{' '}
-            <Link to="/register" className="font-medium text-brand-600 hover:underline">
+            Don&apos;t have a business yet?{' '}
+            <Link to="/signup" className="font-medium text-brand-600 hover:underline">
               Create one
             </Link>
           </p>

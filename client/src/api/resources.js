@@ -11,8 +11,42 @@ const makeResource = (base) => ({
 
 export const authApi = {
   login: (data) => apiClient.post('/auth/login', data).then((r) => r.data),
+  signup: (data) => apiClient.post('/auth/signup', data).then((r) => r.data),
   register: (data) => apiClient.post('/auth/register', data).then((r) => r.data),
   me: () => apiClient.get('/auth/me').then((r) => r.data),
+  switchTenant: (tenantSlug) => apiClient.post('/auth/switch-tenant', { tenantSlug }).then((r) => r.data),
+  acceptInvite: (data) => apiClient.post('/auth/accept-invite', data).then((r) => r.data),
+}
+
+/** The business the signed-in user is working in: profile, plan, features, branches. */
+export const tenantApi = {
+  current: () => apiClient.get('/tenant/current').then((r) => r.data),
+  update: (data) => apiClient.put('/tenant/current', data).then((r) => r.data),
+  locations: () => apiClient.get('/tenant/current/locations').then((r) => r.data),
+  createLocation: (data) => apiClient.post('/tenant/current/locations', data).then((r) => r.data),
+  updateLocation: (id, data) => apiClient.put(`/tenant/current/locations/${id}`, data).then((r) => r.data),
+  deleteLocation: (id) => apiClient.delete(`/tenant/current/locations/${id}`).then((r) => r.data),
+  members: () => apiClient.get('/tenant/current/members').then((r) => r.data),
+  addMember: (data) => apiClient.post('/tenant/current/members', data).then((r) => r.data),
+  updateMember: (id, data) => apiClient.put(`/tenant/current/members/${id}`, data).then((r) => r.data),
+  removeMember: (id) => apiClient.delete(`/tenant/current/members/${id}`).then((r) => r.data),
+  invites: () => apiClient.get('/tenant/current/invites').then((r) => r.data),
+  createInvite: (data) => apiClient.post('/tenant/current/invites', data).then((r) => r.data),
+}
+
+/** Public plan catalogue (marketing + signup). */
+export const saasApi = {
+  plans: () => apiClient.get('/saas/plans').then((r) => r.data),
+}
+
+/** The SaaS operator's console. */
+export const platformApi = {
+  stats: () => apiClient.get('/platform/stats').then((r) => r.data),
+  tenants: () => apiClient.get('/platform/tenants').then((r) => r.data),
+  tenant: (id) => apiClient.get(`/platform/tenants/${id}`).then((r) => r.data),
+  updateTenant: (id, data) => apiClient.put(`/platform/tenants/${id}`, data).then((r) => r.data),
+  createTenant: (data) => apiClient.post('/platform/tenants', data).then((r) => r.data),
+  plans: () => apiClient.get('/platform/plans').then((r) => r.data),
 }
 
 export const customersApi = makeResource('/customers')

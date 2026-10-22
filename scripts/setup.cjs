@@ -8,9 +8,23 @@ const clientDir = path.join(root, 'client');
 const isWin = process.platform === 'win32';
 const npm = isWin ? 'npm.cmd' : 'npm';
 
+// npm >= 11.19 exports the parent's `npm_config_*` settings to the environment
+// of lifecycle scripts. When `allow-scripts` is set in any npmrc, that export
+// becomes an "env" layer policy, and npm then refuses to run a *project-scoped*
+// install with:
+//   EALLOWSCRIPTS  "--allow-scripts is not allowed in project-scoped installs."
+// Strip it from the child environment so the install can resolve the project's
+// own `allowScripts` policy (package.json) instead of the inherited one.
+const childEnv = { ...process.env };
+for (const key of Object.keys(childEnv)) {
+  if (key.toLowerCase().replace(/_/g, '-') === 'npm-config-allow-scripts') {
+    delete childEnv[key];
+  }
+}
+
 const run = (cmd, args, cwd) => {
   console.log(`\n> ${cmd} ${args.join(' ')}  (in ${path.relative(root, cwd) || '.'})`);
-  const r = spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: isWin });
+  const r = spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: isWin, env: childEnv });
   if (r.error || r.status !== 0) {
     console.error(`\nFailed: ${cmd} ${args.join(' ')}`);
     process.exit(r.status || 1);
